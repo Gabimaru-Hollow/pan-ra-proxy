@@ -8,7 +8,7 @@ The MSI (`PanRaProxy.msi`, per-machine, x64) installs the program and registers 
 |---|---|
 | Program | `C:\Program Files\PanRaProxy\PanRaProxy.exe`: one self-contained executable, no .NET prerequisite |
 | Service | `PanRaProxy`, automatic start, runs as the virtual account `NT SERVICE\PanRaProxy`; on failure restarts after 60 s (NFR-08). **Not started by the MSI** unless `START_SERVICE=1` |
-| Event Log | Its own `PanRaProxy` log under "Applications and Services Logs", with upstream's event IDs (spec §5.6) |
+| Event Log | Its own `PanRaProxy` log under "Applications and Services Logs"; one stable event ID per message (`Diagnostics/Log.cs`) |
 | Windows Firewall | Inbound UDP `RADIUS_PORT` for `PanRaProxy.exe` only, optionally limited to `RADIUS_CLIENTS` |
 | Defaults | `appsettings.json` in the install folder: replaced on every upgrade, don't edit |
 | Example | `appsettings.example.json`: a starting point for the site settings |
@@ -70,11 +70,12 @@ Three destinations, each filtered on its own through the `Logging` section:
 | Destination | Default level | For |
 |---|---|---|
 | `PanRaProxy` Event Log | Warning | Monitoring: failures, rejected Logins/Logouts, unreachable Firewalls |
-| `%ProgramData%\PanRaProxy\logs\panraproxy-*.log` | Information | Day-to-day detail; files roll at 16 MB and the newest 14 are kept |
+| `%ProgramData%\PanRaProxy\logs\panraproxy-*.log` | Information | Day-to-day detail: one file a day (`panraproxy-20260925.log`), a new one at 16 MB (`…_001.log`), the newest 14 kept |
 | Console | Information, or Debug with `--debug` | Console runs |
 
 The Event Log is the Proxy's own, not the shared Application log, so its entries can be filtered,
-sized and forwarded on their own. Event IDs are unchanged (spec §5.6).
+sized and forwarded on their own. Each message has its own event ID, listed in `src/PanRaProxy/Diagnostics/Log.cs`;
+most keep the number upstream used for the same event (NFR-07).
 
 Site settings can change any of it, e.g. quieter files and a bigger cap:
 
@@ -85,8 +86,10 @@ Site settings can change any of it, e.g. quieter files and a bigger cap:
 }
 ```
 
-`"File": { "Enabled": false }` turns file logging off. If the folder can't be written, the Proxy
-says so on the console and keeps running with the other two destinations.
+`"File": { "Enabled": false }` turns file logging off. If the folder can't be created, the Proxy
+says so on the console and keeps running with the other two destinations. If a file can't be written
+later (disk full, permissions), those lines are lost and the Proxy keeps running; it tries the file
+again within 30 minutes (ADR 0004).
 
 ### Upgrading from the upstream (net462) Proxy
 

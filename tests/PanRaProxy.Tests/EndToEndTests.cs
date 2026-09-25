@@ -92,7 +92,7 @@ public class EndToEndTests(Xunit.Abstractions.ITestOutputHelper output)
 
         output.WriteLine($"uid-messages: {TestArtifacts.WriteUidMessages(nameof(this.Accounting_start_reaches_the_firewall_as_a_login_and_stop_does_not), uidMessages)}");
 
-        // Upstream event IDs (NFR-07): 4001 accepted, 4002 Batch applied, 4003 filtered; new 4004 listening, 4005 dropped.
+        // Event IDs (NFR-07): 4001 accepted, 4002 Batch applied, 4003 filtered, 4004 listening, 4005 dropped.
         Assert.Contains(4004, logs.EventIds);
         Assert.Equal(4, logs.EventIds.Count(id => id == 4001));
         Assert.Contains(4002, logs.EventIds);

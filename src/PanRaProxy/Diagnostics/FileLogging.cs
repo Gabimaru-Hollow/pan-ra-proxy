@@ -1,10 +1,12 @@
-using System.Collections.Concurrent;
-using System.Globalization;
-using System.Text;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Configuration;
 using Microsoft.Extensions.Options;
 using PanRaProxy.Options;
+using Serilog;
+using Serilog.Core;
+using Serilog.Events;
+using Serilog.Extensions.Logging;
+using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 namespace PanRaProxy.Diagnostics;
 
@@ -19,7 +21,7 @@ public sealed class FileLoggingOptions
 
     public string FileNamePrefix { get; set; } = "panraproxy";
 
-    /// <summary>A new file is started once the current one reaches this size.</summary>
+    /// <summary>A new file is started once the current one reaches this size, and every day.</summary>
     public int MaxFileSizeMb { get; set; } = 16;
 
     /// <summary>Older files beyond this count are deleted, newest kept.</summary>
@@ -42,15 +44,28 @@ public static class FileLoggingRegistration
     }
 }
 
+/// <summary>
+/// The file log, written by Serilog's file sink behind <c>ILogger</c> (ADR 0004): the code only ever sees
+/// <c>ILogger</c>, and this is the one place that knows Serilog. The alias keeps the settings under
+/// <c>Logging:File</c>. Serilog never throws into the caller: a file that can't be written is reported
+/// to Serilog's SelfLog and the Proxy goes on.
+/// </summary>
 [ProviderAlias("File")]
 internal sealed class FileLoggerProvider : ILoggerProvider
 {
-    private readonly FileLogWriter? writer;
+    private const string OutputTemplate =
+        "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} {Level:u3} {EventNumber,4} {SourceContext} | {Message:lj}{NewLine}{Exception}";
 
+    private readonly SerilogLoggerProvider? serilog;
 
     public FileLoggerProvider(IOptions<FileLoggingOptions> options)
+        : this(options.Value, Math.Max(1, options.Value.MaxFileSizeMb) * 1024L * 1024L)
     {
-        FileLoggingOptions settings = options.Value;
+    }
+
+    /// <summary>Used by the tests, to roll files after a few hundred bytes.</summary>
+    internal FileLoggerProvider(FileLoggingOptions settings, long fileSizeLimitBytes)
+    {
         if (!settings.Enabled)
         {
             return;
@@ -62,212 +77,51 @@ internal sealed class FileLoggerProvider : ILoggerProvider
 
         try
         {
-            this.writer = new FileLogWriter(directory, settings.FileNamePrefix,
-                Math.Max(1, settings.MaxFileSizeMb) * 1024L * 1024L, settings.RetainedFiles);
+            // Created here so a folder that can't exist is reported at startup, not silently on the first line.
+            System.IO.Directory.CreateDirectory(directory);
         }
         catch (Exception ex)
         {
             // Never stop the Proxy because it can't write its log; the console and Event Log remain.
             Console.Error.WriteLine($"File logging is off: {ex.Message}");
+            return;
         }
-    }
 
-    /// <summary>Used by the tests to drive the writer directly.</summary>
-    internal FileLoggerProvider(FileLogWriter writer) => this.writer = writer;
+        Serilog.Core.Logger logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose() // Logging:File:LogLevel filters before Serilog sees an event.
+            .Enrich.With<EventNumberEnricher>()
+            .WriteTo.File(
+                Path.Combine(directory, $"{settings.FileNamePrefix}-.log"),
+                outputTemplate: OutputTemplate,
+                formatProvider: System.Globalization.CultureInfo.InvariantCulture,
+                rollingInterval: RollingInterval.Day,
+                rollOnFileSizeLimit: true,
+                fileSizeLimitBytes: Math.Max(1, fileSizeLimitBytes),
+                retainedFileCountLimit: Math.Max(1, settings.RetainedFiles))
+            .CreateLogger();
+
+        this.serilog = new SerilogLoggerProvider(logger, dispose: true);
+    }
 
     public ILogger CreateLogger(string categoryName) =>
-        this.writer is null ? NullLogger.Instance : new FileLogger(categoryName, this.writer);
+        this.serilog?.CreateLogger(categoryName) ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
 
-    public void Dispose() => this.writer?.Dispose();
-
-    private sealed class NullLogger : ILogger
-    {
-        public static readonly NullLogger Instance = new();
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => false;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-        }
-    }
-
-    private sealed class FileLogger(string category, FileLogWriter writer) : ILogger
-    {
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-            if (!this.IsEnabled(logLevel))
-            {
-                return;
-            }
-
-            StringBuilder line = new StringBuilder(256)
-                .Append(DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss.fff zzz", CultureInfo.InvariantCulture))
-                .Append(' ').Append(Level(logLevel))
-                .Append(' ').Append(eventId.Id.ToString(CultureInfo.InvariantCulture).PadLeft(4))
-                .Append(' ').Append(category)
-                .Append(" | ").Append(formatter(state, exception));
-
-            if (exception is not null)
-            {
-                line.Append(Environment.NewLine).Append(exception);
-            }
-
-            writer.Write(line.ToString());
-        }
-
-        private static string Level(LogLevel level) => level switch
-        {
-            LogLevel.Trace => "TRC",
-            LogLevel.Debug => "DBG",
-            LogLevel.Information => "INF",
-            LogLevel.Warning => "WRN",
-            LogLevel.Error => "ERR",
-            LogLevel.Critical => "CRT",
-            _ => "???",
-        };
-    }
-}
-
-/// <summary>
-/// Writes lines on one background thread, rolls the file by size and keeps the newest files.
-/// Writing never blocks the caller: when the queue is full, lines are dropped and counted.
-/// </summary>
-internal sealed class FileLogWriter : IDisposable
-{
-    private const int QueueCapacity = 10_000;
-
-    private readonly BlockingCollection<string> queue = new(QueueCapacity);
-    private readonly Thread thread;
-    private readonly string directory;
-    private readonly string prefix;
-    private readonly long maxBytes;
-    private readonly int retained;
-    private StreamWriter? file;
-    private long written;
-    private long dropped;
-
-    public FileLogWriter(string directory, string prefix, long maxBytes, int retainedFiles)
-    {
-        this.directory = directory;
-        this.prefix = prefix;
-        this.maxBytes = Math.Max(1, maxBytes);
-        this.retained = Math.Max(1, retainedFiles);
-
-        System.IO.Directory.CreateDirectory(directory);
-        this.Open();
-
-        this.thread = new Thread(this.Run) { IsBackground = true, Name = "PanRaProxy file log" };
-        this.thread.Start();
-    }
-
-    public string CurrentFile { get; private set; } = "";
-
-    public void Write(string line)
-    {
-        if (!this.queue.TryAdd(line))
-        {
-            Interlocked.Increment(ref this.dropped);
-        }
-    }
+    public void Dispose() => this.serilog?.Dispose();
 
     /// <summary>
-    /// The writer thread closes the file itself, so a thread still busy after the timeout never
-    /// writes to a file closed under it.
+    /// The <c>ILogger</c> event ID as a plain number for the output template; 0 when there is none.
     /// </summary>
-    public void Dispose()
+    private sealed class EventNumberEnricher : ILogEventEnricher
     {
-        this.queue.CompleteAdding();
-        this.thread.Join(TimeSpan.FromSeconds(5));
-    }
-
-    private void Run()
-    {
-        foreach (string line in this.queue.GetConsumingEnumerable())
+        public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory)
         {
-            // An exception on this thread would end the process: a locked or full disk, or a file
-            // that can't be opened, must not take the Proxy down.
-            try
-            {
-                long dropped = Interlocked.Read(ref this.dropped);
-                if (dropped > 0)
-                {
-                    this.WriteLine($"[{dropped} log lines dropped: the file log queue was full or no file could be written]");
-                    Interlocked.Add(ref this.dropped, -dropped);
-                }
+            int id = logEvent.Properties.TryGetValue("EventId", out LogEventPropertyValue? value)
+                     && value is StructureValue structure
+                     && structure.Properties.FirstOrDefault(p => p.Name == "Id")?.Value is ScalarValue { Value: int number }
+                ? number
+                : 0;
 
-                this.WriteLine(line);
-            }
-            catch (Exception)
-            {
-                Interlocked.Increment(ref this.dropped);
-            }
-        }
-
-        this.file?.Dispose();
-    }
-
-    private void WriteLine(string line)
-    {
-        if (this.file is null)
-        {
-            this.Open();
-        }
-
-        StreamWriter file = this.file!;
-        file.WriteLine(line);
-        file.Flush();
-        this.written += line.Length + Environment.NewLine.Length;
-
-        if (this.written >= this.maxBytes)
-        {
-            // The next line opens a new file, and keeps trying until one opens.
-            this.file = null;
-            file.Dispose();
-        }
-    }
-
-    private void Open()
-    {
-        // Several rolls can land in the same second, so the name gets a counter when it's taken.
-        string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-        string path = Path.Combine(this.directory, $"{this.prefix}-{stamp}.log");
-        for (int i = 2; File.Exists(path); i++)
-        {
-            path = Path.Combine(this.directory, $"{this.prefix}-{stamp}-{i}.log");
-        }
-
-        this.CurrentFile = path;
-        // UTF-8 without a BOM: log files are read with grep and tail, not with an editor.
-        this.file = new StreamWriter(this.CurrentFile, append: true, new UTF8Encoding(false));
-        this.written = 0;
-        this.Prune();
-    }
-
-    private void Prune()
-    {
-        try
-        {
-            foreach (FileInfo old in new DirectoryInfo(this.directory)
-                         .GetFiles($"{this.prefix}-*.log")
-                         .OrderByDescending(f => f.CreationTimeUtc)
-                         .Skip(this.retained))
-            {
-                old.Delete();
-            }
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
+            logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("EventNumber", id));
         }
     }
 }

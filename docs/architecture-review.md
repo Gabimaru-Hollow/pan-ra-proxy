@@ -9,10 +9,10 @@ Reviewed at `ed83069` on `refactor/net8-fork`, with 150 tests green. The review 
 | 1 | [One composition root](#1-one-composition-root) | Done |
 | 2 | [Canonical Username as its own module](#2-canonical-username-as-its-own-module) | Done |
 | 3 | [A domain rule that validates itself](#3-a-domain-rule-that-validates-itself) | Done |
-| 4 | [Break the Diagnostics hub](#4-break-the-diagnostics-hub) | Worth exploring |
+| 4 | [Break the Diagnostics hub](#4-break-the-diagnostics-hub) | Rejected ([ADR 0005](adr/0005-log-messages-stay-in-one-file.md)) |
 | 5 | [Make startup a module, not a script](#5-make-startup-a-module-not-a-script) | Worth exploring |
 | 6 | [Split failover from submission](#6-split-failover-from-submission) | Speculative |
-| 7–11 | [Second pass: fragilities](#second-pass-fragilities) | 7–10 fixed; 11 partly |
+| 7–11 | [Second pass: fragilities](#second-pass-fragilities) | 7–10 fixed; 11 mostly |
 
 Suggested order: 1 first, because it is cheap and protects the evidence the rest rests on; then 2 and 3 together, because they are the same change seen from two sides. The [validation agenda](#validation-agenda) at the end says what each candidate has to answer before it is worth doing.
 
@@ -99,7 +99,9 @@ The regexes are still compiled twice at startup, once by the validator and once 
 
 **Solution.** Each module keeps its own log messages and counters next to the code that raises them. Diagnostics keeps what is genuinely shared: the event-ID constants, the file log, the Event Log settings and the meter. The Batch module exposes a small queue snapshot instead of handing its whole self to the metrics.
 
-**Why only "worth exploring".** One file listing every event ID is also what keeps the table in [refactoring-spec.md §5.6](refactoring-spec.md) honest, and NFR-07 ties those IDs to existing monitoring. The constants would have to stay shared, and the win is then smaller than it first looks.
+**Why only "worth exploring".** One file listing every event ID looked like what kept the event IDs honest, and NFR-07 tied those IDs to existing monitoring. The constants would have to stay shared, and the win is then smaller than it first looks.
+
+**Outcome.** Rejected, recorded in [ADR 0005](adr/0005-log-messages-stay-in-one-file.md). The table the candidate was protecting didn't exist: the spec has no §5.6, even though four documents cited it. And no monitoring depends on upstream's IDs, because the upstream Proxy never ran in this deployment (the existing pipeline is Vector reading NPS logs). NFR-07 was amended, a registry would be YAGNI, and the cycle sits inside one assembly and has cost nothing. Messages can move next to their module when that module is being changed anyway.
 
 ---
 
@@ -164,7 +166,7 @@ Now an empty `Nt4Domain`, `Replace` or `Lookup` on a domain rule is rejected at 
 - **DRY.** *Fixed with candidate 3.* The validator compiled regexes with `IgnoreCase`, while the decision module used `IgnoreCase | CultureInvariant`.
 - **SRP / discoverability.** *Half fixed.* `MappingDecisionSink` became `MappingDecisionWorker`, in a file of its own. `BatchSender` still lives in `FirewallRegistration.cs`.
 - **DIP.** `Func<string, IPAddress[]>` is a DI key. A raw `Func` is an ambiguous key: any other `Func` of the same shape would collide. The other adapters are named delegates (`SecretLookup`, `ProcessExit`).
-- **KISS / YAGNI.** The rolling file logger is 265 lines of our own code, and it held finding 7. Keeping it rather than taking a dependency is a choice worth an ADR, either way.
+- **KISS / YAGNI.** *Done.* The rolling file logger was 265 lines of our own code, and it held finding 7. Serilog's file sink now writes the files, behind `ILogger` and known only to `Diagnostics/FileLogging.cs` ([ADR 0004](adr/0004-file-log-through-serilog-behind-ilogger.md)).
 
 ---
 
@@ -195,7 +197,7 @@ continue.
 | 1 | Is the duplicated composition a real cost, or a one-off already paid? | Whether the registrations are expected to keep changing (metrics, a config-check command, a replay tool), and whether a test asserting "the test's graph equals `Program`'s" would be enough instead | Probably no ADR: the reason is ephemeral |
 | 2 | Are the username rules still going to move? | The AD spot-check on `name.surname`: if the convention holds everywhere, the rules freeze and the split buys less. Also decide the interface: plain `string → string`, or a result that says which rule matched, which would let the Proxy count non-canonical Mappings | ADR worth writing: "the Canonical Username rules stay inside the Mapping decision because …" |
 | 3 | Should an invalid rule be unrepresentable, or is validation-at-startup enough? | Whether configuration will ever be reloaded without a restart. If it never is, compiling once at startup may already be sufficient, and the duplication is only the `user`-group check | ADR if rejected on the "two statements of the same rule are fine because …" ground |
-| 4 | Does the event-ID table need to live in one file? | How the spec §5.6 table and NFR-07 would be kept honest with the messages spread across modules: a shared constants file, or a test that reads the IDs and compares them with the table | Likely rejected: then record why, because the cycle is visible and someone will propose this again |
+| 4 | Does the event-ID table need to live in one file? | How NFR-07 would be kept honest with the messages spread across modules: a shared constants file, or a test that reads the IDs and compares them with a table | Rejected: ADR 0005 |
 | 5 | Which startup behaviours must be pinned by a test? | The list of things an administrator depends on: exit codes, `--help`, `--version`, the Event Log fallback message. If the console surface is going to grow (say a `--check-config`), the module is justified now rather than later | No ADR needed: it is a question of when, not whether |
 | 6 | Is a second failover policy coming? | The open question in [deployment.md](deployment.md): how the passive HA peer answers a User-ID call. If it answers with an API error, the failover rule itself has to change, and that is the moment to reconsider | ADR: "failover stays inside the Firewall submission module until a second policy exists" |
 

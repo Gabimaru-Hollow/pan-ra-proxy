@@ -11,37 +11,20 @@ public sealed class FileLoggingTests : IDisposable
 
     private string[] Files() => Directory.GetFiles(this.directory, "test-*.log").OrderBy(f => f).ToArray();
 
-    /// <summary>Reads a log the writer still holds open, the way tail would.</summary>
-    private static string ReadShared(string path)
-    {
-        using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        using StreamReader reader = new(stream);
-        return reader.ReadToEnd();
-    }
-
-    private static void WaitFor(Func<bool> condition)
-    {
-        for (int i = 0; i < 100 && !condition(); i++)
-        {
-            Thread.Sleep(20);
-        }
-
-        Assert.True(condition(), "the file log did not catch up within 2 s");
-    }
+    private FileLoggerProvider Provider(long fileSizeLimitBytes = 1024 * 1024, int retainedFiles = 5) =>
+        new(new FileLoggingOptions { Directory = this.directory, FileNamePrefix = "test", RetainedFiles = retainedFiles }, fileSizeLimitBytes);
 
     [Fact]
     public void Every_line_carries_the_time_level_event_id_and_category()
     {
-        using (FileLogWriter writer = new(this.directory, "test", 1024 * 1024, 5))
+        using (FileLoggerProvider provider = this.Provider())
         {
-            ILogger logger = new FileLoggerProvider(writer).CreateLogger("PanRaProxy.Firewall.BatchSender");
-            logger.Log(LogLevel.Information, new EventId(4002), "state", null, (_, _) => "Firewall applied 2 Logins");
-            logger.Log(LogLevel.Error, new EventId(3007), "state", new InvalidOperationException("boom"), (_, _) => "rejected");
-
-            WaitFor(() => ReadShared(writer.CurrentFile).Contains("rejected"));
+            ILogger logger = provider.CreateLogger("PanRaProxy.Firewall.BatchSender");
+            logger.LogInformation(new EventId(4002), "Firewall applied {Logins} Logins", 2);
+            logger.LogError(new EventId(3007), new InvalidOperationException("boom"), "rejected");
         }
 
-        string[] lines = ReadShared(this.Files().Single()).Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        string[] lines = File.ReadAllText(this.Files().Single()).Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Contains("INF 4002 PanRaProxy.Firewall.BatchSender | Firewall applied 2 Logins", lines[0]);
         Assert.Matches(@"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} ", lines[0]);
@@ -52,14 +35,13 @@ public sealed class FileLoggingTests : IDisposable
     [Fact]
     public void Files_roll_at_the_size_limit_and_only_the_newest_are_kept()
     {
-        using (FileLogWriter writer = new(this.directory, "test", maxBytes: 200, retainedFiles: 3))
+        using (FileLoggerProvider provider = this.Provider(fileSizeLimitBytes: 200, retainedFiles: 3))
         {
+            ILogger logger = provider.CreateLogger("test");
             for (int i = 0; i < 40; i++)
             {
-                writer.Write(new string('x', 100));
+                logger.LogInformation("{Line}", new string('x', 100));
             }
-
-            WaitFor(() => this.Files().Length >= 3);
         }
 
         string[] files = this.Files();
@@ -69,34 +51,16 @@ public sealed class FileLoggingTests : IDisposable
     }
 
     [Fact]
-    public void A_roll_that_cannot_open_the_next_file_does_not_stop_the_proxy()
+    public void A_log_file_that_cannot_be_opened_does_not_stop_the_proxy()
     {
-        using FileLogWriter writer = new(this.directory, "test", maxBytes: 10, retainedFiles: 100);
+        // A directory under the name the file would take: opening it for writing is denied.
+        Directory.CreateDirectory(Path.Combine(this.directory, $"test-{DateTime.Now:yyyyMMdd}.log"));
 
-        // Directories under the names the next files would take: opening them for writing is denied.
-        List<string> blockers = [];
-        for (int second = 0; second < 10; second++)
-        {
-            string stamp = DateTime.Now.AddSeconds(second).ToString("yyyyMMdd-HHmmss");
-            foreach (string name in Enumerable.Range(1, 5).Select(i => i == 1 ? $"test-{stamp}.log" : $"test-{stamp}-{i}.log"))
-            {
-                string path = Path.Combine(this.directory, name);
-                if (!File.Exists(path))
-                {
-                    blockers.Add(Directory.CreateDirectory(path).FullName);
-                }
-            }
-        }
+        using FileLoggerProvider provider = this.Provider();
+        ILogger logger = provider.CreateLogger("test");
 
-        writer.Write("fills the first file and triggers a roll");
-        writer.Write("lost while no file can be opened");
-        Thread.Sleep(200);
-
-        blockers.ForEach(b => Directory.Delete(b));
-        writer.Write("back after the blockers are gone");
-
-        WaitFor(() => this.Files().Any(f => ReadShared(f).Contains("back after the blockers are gone")));
-        Assert.Contains(this.Files(), f => ReadShared(f).Contains("log lines dropped"));
+        logger.LogInformation("lost, and nothing else happens");
+        logger.LogError(new InvalidOperationException("boom"), "lost too");
     }
 
     [Fact]

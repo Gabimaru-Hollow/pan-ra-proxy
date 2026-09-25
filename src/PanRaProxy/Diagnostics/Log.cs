@@ -6,8 +6,8 @@ using PanRaProxy.Radius;
 namespace PanRaProxy.Diagnostics;
 
 /// <summary>
-/// Every log message the Proxy writes. Event IDs keep upstream's numbers (NFR-07) so existing
-/// Event Log monitoring keeps matching; IDs marked "new" didn't exist upstream.
+/// Every log message the Proxy writes, each with a stable event ID (NFR-07). Where the event is the one
+/// upstream reported, the number is upstream's; IDs marked "new" didn't exist upstream.
 /// </summary>
 internal static partial class Log
 {
