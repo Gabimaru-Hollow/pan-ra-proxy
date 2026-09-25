@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PAN RADIUS Accounting Proxy: per-machine x64 MSI (WiX v5).
+
+  Installs the service (virtual account NT SERVICE\PanRaProxy, restart on failure), the Event Log source,
+  a Windows Firewall rule for RADIUS accounting, the default settings and Set-PanRaProxySecret.ps1.
+  Never carries secrets or site settings: those are provided after installation (docs/install.md).
+
+  Public properties for setup tools:
+    RADIUS_PORT     UDP port the firewall rule opens (default 18131). Must match Radius:Port in the site settings.
+    RADIUS_CLIENTS  Optional remote addresses allowed by the firewall rule, e.g. "10.0.0.10,10.0.0.11". Empty = any.
+    START_SERVICE   1 = start the service at the end of the install (use on upgrades, once secrets exist).
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+     xmlns:fw="http://wixtoolset.org/schemas/v4/wxs/firewall">
+
+  <Package Name="PAN RADIUS Accounting Proxy"
+           Manufacturer="PAN RADIUS Accounting Proxy"
+           Version="!(bind.FileVersion.PanRaProxyExe)"
+           UpgradeCode="1542A4F0-D84A-4CF6-8D78-D1D42890B9F0"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <MajorUpgrade Schedule="afterInstallInitialize"
+                  DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="RADIUS_PORT" Value="18131" Secure="yes" />
+    <Property Id="RADIUS_CLIENTS" Secure="yes" />
+    <Property Id="START_SERVICE" Value="0" Secure="yes" />
+
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/lithnet/pan-ra-proxy" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="PanRaProxy" />
+    </StandardDirectory>
+
+    <Feature Id="Proxy" Title="PAN RADIUS Accounting Proxy" Level="1">
+      <ComponentGroupRef Id="Service" />
+      <ComponentGroupRef Id="Settings" />
+      <ComponentGroupRef Id="FirewallRule" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="Service" Directory="INSTALLFOLDER">
+      <Component Id="ServiceExecutable" Bitness="always64">
+        <File Id="PanRaProxyExe" Source="$(var.PayloadDir)PanRaProxy.exe" KeyPath="yes" />
+
+        <ServiceInstall Id="PanRaProxy"
+                        Name="PanRaProxy"
+                        DisplayName="PAN RADIUS Accounting Proxy"
+                        Description="Turns RADIUS accounting into Palo Alto User-ID mappings."
+                        Type="ownProcess"
+                        Start="auto"
+                        ErrorControl="normal"
+                        Account="NT SERVICE\PanRaProxy"
+                        Vital="yes">
+          <!-- NFR-08: the Proxy exits with code 1 when its listener fails; Windows restarts it. -->
+          <util:ServiceConfig FirstFailureActionType="restart"
+                              SecondFailureActionType="restart"
+                              ThirdFailureActionType="restart"
+                              RestartServiceDelayInSeconds="60"
+                              ResetPeriodInDays="1" />
+        </ServiceInstall>
+
+        <!-- Never started by default: on a fresh install the secrets don't exist yet. -->
+        <ServiceControl Id="StopAndRemove" Name="PanRaProxy" Stop="both" Remove="uninstall" Wait="yes" />
+      </Component>
+
+      <Component Id="StartServiceOnRequest" Bitness="always64" Condition="START_SERVICE = 1">
+        <RegistryValue Root="HKLM" Key="SOFTWARE\PanRaProxy" Name="StartedByInstaller" Type="integer" Value="1" KeyPath="yes" />
+        <ServiceControl Id="StartOnInstall" Name="PanRaProxy" Start="install" Wait="yes" />
+      </Component>
+
+      <!-- Upstream's source name, so existing Event Log filters keep matching (NFR-07). -->
+      <Component Id="EventLogSource" Bitness="always64">
+        <util:EventSource Name="PanRAProxy"
+                          Log="Application"
+                          EventMessageFile="[%SystemRoot]\Microsoft.NET\Framework64\v4.0.30319\EventLogMessages.dll"
+                          KeyPath="yes" />
+      </Component>
+
+      <Component Id="SecretHelper" Bitness="always64">
+        <File Id="SetSecretScript" Source="Set-PanRaProxySecret.ps1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Defaults only: replaced on every upgrade. Site settings live in %ProgramData%\PanRaProxy. -->
+    <ComponentGroup Id="Settings" Directory="INSTALLFOLDER">
+      <Component Id="DefaultSettings" Bitness="always64">
+        <File Id="AppSettings" Source="$(var.PayloadDir)appsettings.json" KeyPath="yes" />
+      </Component>
+      <Component Id="ExampleSettings" Bitness="always64">
+        <File Id="AppSettingsExample" Source="$(var.PayloadDir)appsettings.example.json" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Inbound RADIUS accounting, for the Proxy's executable only. -->
+    <ComponentGroup Id="FirewallRule" Directory="INSTALLFOLDER">
+      <Component Id="FirewallRuleAnySource" Bitness="always64" Condition="NOT RADIUS_CLIENTS">
+        <RegistryValue Root="HKLM" Key="SOFTWARE\PanRaProxy" Name="FirewallRuleAnySource" Type="string" Value="any" KeyPath="yes" />
+        <fw:FirewallException Id="RadiusAccountingAny"
+                              Name="PAN RADIUS Accounting Proxy (UDP-In)"
+                              Program="[#PanRaProxyExe]"
+                              Port="[RADIUS_PORT]"
+                              Protocol="udp"
+                              Scope="any"
+                              Profile="all" />
+      </Component>
+      <Component Id="FirewallRuleRadiusClients" Bitness="always64" Condition="RADIUS_CLIENTS">
+        <RegistryValue Root="HKLM" Key="SOFTWARE\PanRaProxy" Name="FirewallRuleRadiusClients" Type="string" Value="[RADIUS_CLIENTS]" KeyPath="yes" />
+        <fw:FirewallException Id="RadiusAccountingClients"
+                              Name="PAN RADIUS Accounting Proxy (UDP-In)"
+                              Program="[#PanRaProxyExe]"
+                              Port="[RADIUS_PORT]"
+                              Protocol="udp"
+                              Profile="all">
+          <fw:RemoteAddress Value="[RADIUS_CLIENTS]" />
+        </fw:FirewallException>
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

@@ -1,0 +1,20 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <!--
+    Built by build/build-msi.ps1, which first publishes src/PanRaProxy as one self-contained
+    executable and passes its folder as PayloadDir.
+  -->
+  <PropertyGroup>
+    <OutputName>PanRaProxy</OutputName>
+    <Platform>x64</Platform>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <PayloadDir Condition="'$(PayloadDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\publish\</PayloadDir>
+    <DefineConstants>PayloadDir=$(PayloadDir)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.Firewall.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+</Project>
