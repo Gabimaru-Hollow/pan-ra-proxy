@@ -13,6 +13,7 @@ Reviewed at `ed83069` on `refactor/net8-fork`, with 150 tests green. The review 
 | 5 | [Make startup a module, not a script](#5-make-startup-a-module-not-a-script) | Done |
 | 6 | [Split failover from submission](#6-split-failover-from-submission) | On hold |
 | 7–11 | [Second pass: fragilities](#second-pass-fragilities) | Fixed |
+| 12 | [Install from the binary](#12-install-from-the-binary) | Candidate |
 
 Suggested order: 1 first, because it is cheap and protects the evidence the rest rests on; then 2 and 3 together, because they are the same change seen from two sides. The [validation agenda](#validation-agenda) at the end says what each candidate has to answer before it is worth doing.
 
@@ -176,6 +177,26 @@ Now an empty `Nt4Domain`, `Replace` or `Lookup` on a domain rule is rejected at 
 
 ---
 
+## 12. Install from the binary
+
+**Status:** candidate (2026-09-25). Not planned: the repo is at MVP stage and the standalone binary is the preferred way to work with it. The MSI stays, and it has never been installed on a machine.
+
+**Where:** `src/PanRaProxy.Setup/Package.wxs` · `src/PanRaProxy.Setup/Set-PanRaProxySecret.ps1` · `Startup/ProxyStartup.cs` · `Diagnostics/DiagnosticsRegistration.EventLogProblem`.
+
+**Problem.** The Proxy relies on the MSI for four things:
+- the `PanRaProxy` Event Log and its source;
+- the logs folder;
+- the secrets folder with its protected ACL ([ADR 0003](adr/0003-secrets-as-protected-files-provided-after-install.md));
+- the service registration, with its recovery settings (NFR-08).
+
+Since candidate 5, the Proxy deliberately never creates any of them itself. Installed from the binary alone, the service would run, but with console and files only: no Event Log, and secrets only from environment variables.
+
+**Solution, if needed.** Explicit commands in the startup module, `--install` and `--uninstall`, that create and remove those four things, run from an elevated prompt. They would do this only when asked, never as a side effect of a run, so a console run still leaves nothing behind. They could take over from the MSI, or sit beside it for machines where an MSI is unwelcome.
+
+**What would bring it forward.** Deploying without the MSI, or the MSI getting in the way of how the Proxy is rolled out. The cost to weigh then: two ways to install that must create the same things, unless one replaces the other.
+
+---
+
 ## Validation agenda
 
 These candidates were written by the author of the code they criticise, so the first job of the
@@ -206,6 +227,7 @@ continue.
 | 4 | Does the event-ID table need to live in one file? | How NFR-07 would be kept honest with the messages spread across modules: a shared constants file, or a test that reads the IDs and compares them with a table | Rejected: ADR 0005 |
 | 5 | Which startup behaviours must be pinned by a test? | The list of things an administrator depends on: exit codes, `--help`, `--version`, the Event Log fallback message. If the console surface is going to grow (say a `--check-config`), the module is justified now rather than later | No ADR needed: it is a question of when, not whether |
 | 6 | Is a second failover policy coming? | The open question in [deployment.md](deployment.md): how the passive HA peer answers a User-ID call. If it answers with an API error, the failover rule itself has to change, and that is the moment to reconsider | ADR: "failover stays inside the Firewall submission module until a second policy exists" |
+| 12 | Will the Proxy be installed without the MSI? | How it will be rolled out once past the MVP: MSI, binary alone, or both | Nothing to record: it stays a candidate |
 
 **Two questions that sit above the list.** First: is there a candidate missing, something that has actually
 hurt while working in this code and isn't here? Second: which of these would you not want done even if
