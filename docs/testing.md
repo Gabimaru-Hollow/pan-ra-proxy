@@ -6,6 +6,23 @@ Two levels: unit and module tests in `tests/PanRaProxy.Tests` (`dotnet test`), a
 `artifacts/tests/*.uid-messages.log`, one section per Batch with the Logins and Logouts and the raw
 XML, so a run can be read afterwards instead of only asserted on.
 
+## Both at once
+
+`build\test-all.ps1` runs the unit tests, publishes the executable and replays the newest capture in the
+repository root against it, then prints a summary. It exits 0 when every step that ran passed.
+
+```powershell
+.\build\test-all.ps1 -Secret testing123          # or set $env:PANRA_REPLAY_SECRET once
+.\build\test-all.ps1 -Quiet                      # replay RESULT lines only; transcript in artifacts\e2e\replay-console.log
+.\build\test-all.ps1 -SkipReplay                 # unit tests only
+.\build\test-all.ps1 -Speed 1 -ReplayArgs '--logout-on-stop'
+```
+
+Without a capture or a secret, the replay is skipped with a warning rather than failed, since captures
+never leave the machine they were taken on. `-Pcap` and `-Detail` pick a capture other than the newest,
+and `-DomainArgs` replaces the default domain rules (the ones in the example below). A wrong secret
+fails the replay slowly, because it waits out the acknowledgement timeout for every packet.
+
 ## End-to-end replay of a live capture
 
 `tools/e2e/live-replay.py` runs the whole path on one machine, with no installation and no administrator rights:
