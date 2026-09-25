@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PanRaProxy.Options;
+using PanRaProxy.Radius;
 
 namespace PanRaProxy.Tests.Options;
 
@@ -312,7 +313,7 @@ public class ProxyOptionsTests
     /// <summary>
     /// The graph that ships, with only the machine replaced: secrets, and name resolution when given.
     /// </summary>
-    private static ServiceProvider BuildProxy(Dictionary<string, string?> overrides, CollectingLoggerProvider logs, Func<string, IPAddress[]>? resolve = null)
+    private static ServiceProvider BuildProxy(Dictionary<string, string?> overrides, CollectingLoggerProvider logs, HostResolver? resolve = null)
     {
         Dictionary<string, string?> config = new(ValidConfig);
         foreach (KeyValuePair<string, string?> pair in overrides)

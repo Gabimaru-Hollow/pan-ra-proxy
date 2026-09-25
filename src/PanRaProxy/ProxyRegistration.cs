@@ -19,7 +19,7 @@ public static class ProxyRegistration
         services.AddSingleton<SecretLookup>(SecretStore.Read);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<ProcessExit>(Environment.Exit);
-        services.AddSingleton<Func<string, IPAddress[]>>(Dns.GetHostAddresses);
+        services.AddSingleton<HostResolver>(Dns.GetHostAddresses);
 
         return services
             .AddProxyOptions(configuration)

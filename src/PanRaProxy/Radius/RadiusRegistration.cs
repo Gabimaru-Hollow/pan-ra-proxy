@@ -1,4 +1,3 @@
-using System.Net;
 using Microsoft.Extensions.Options;
 using PanRaProxy.Options;
 
@@ -11,7 +10,7 @@ internal static class RadiusRegistration
         services.AddSingleton(sp => RadiusClientRegistry.FromOptions(
             sp.GetRequiredService<IOptions<RadiusOptions>>().Value,
             sp.GetRequiredService<SecretLookup>(),
-            sp.GetRequiredService<Func<string, IPAddress[]>>()));
+            sp.GetRequiredService<HostResolver>()));
 
         services.AddSingleton<AccountingPacketHandler>();
         services.AddHostedService<AccountingListener>();

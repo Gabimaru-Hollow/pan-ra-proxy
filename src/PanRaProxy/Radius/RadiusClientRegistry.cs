@@ -7,6 +7,12 @@ using PanRaProxy.Options;
 namespace PanRaProxy.Radius;
 
 /// <summary>
+/// Resolves a RADIUS Client's host name to its addresses. Production uses <see cref="Dns.GetHostAddresses(string)"/>;
+/// tests pass a fixed table. Throws <see cref="SocketException"/> when the name doesn't resolve.
+/// </summary>
+public delegate IPAddress[] HostResolver(string host);
+
+/// <summary>
 /// The shared secret of each RADIUS Client, keyed by source IP.
 /// </summary>
 public sealed class RadiusClientRegistry
@@ -25,7 +31,7 @@ public sealed class RadiusClientRegistry
     /// Resolves each configured host to its IPv4 addresses once, at startup. A host that doesn't resolve,
     /// or two hosts sharing an address with different secrets, stops the Proxy (NFR-08).
     /// </summary>
-    public static RadiusClientRegistry FromOptions(RadiusOptions options, SecretLookup secrets, Func<string, IPAddress[]> resolve)
+    public static RadiusClientRegistry FromOptions(RadiusOptions options, SecretLookup secrets, HostResolver resolve)
     {
         Dictionary<IPAddress, string> secretsByAddress = [];
 
