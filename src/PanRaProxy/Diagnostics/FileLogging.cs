@@ -178,51 +178,59 @@ internal sealed class FileLogWriter : IDisposable
         }
     }
 
+    /// <summary>
+    /// The writer thread closes the file itself, so a thread still busy after the timeout never
+    /// writes to a file closed under it.
+    /// </summary>
     public void Dispose()
     {
         this.queue.CompleteAdding();
         this.thread.Join(TimeSpan.FromSeconds(5));
-        this.file?.Dispose();
     }
 
     private void Run()
     {
         foreach (string line in this.queue.GetConsumingEnumerable())
         {
+            // An exception on this thread would end the process: a locked or full disk, or a file
+            // that can't be opened, must not take the Proxy down.
             try
             {
-                long dropped = Interlocked.Exchange(ref this.dropped, 0);
+                long dropped = Interlocked.Read(ref this.dropped);
                 if (dropped > 0)
                 {
-                    this.WriteLine($"[{dropped} log lines dropped: the file log queue was full]");
+                    this.WriteLine($"[{dropped} log lines dropped: the file log queue was full or no file could be written]");
+                    Interlocked.Add(ref this.dropped, -dropped);
                 }
 
                 this.WriteLine(line);
             }
-            catch (IOException)
+            catch (Exception)
             {
-                // A locked or full disk must not take the Proxy down.
+                Interlocked.Increment(ref this.dropped);
             }
         }
 
-        this.file?.Flush();
+        this.file?.Dispose();
     }
 
     private void WriteLine(string line)
     {
         if (this.file is null)
         {
-            return;
+            this.Open();
         }
 
-        this.file.WriteLine(line);
-        this.file.Flush();
+        StreamWriter file = this.file!;
+        file.WriteLine(line);
+        file.Flush();
         this.written += line.Length + Environment.NewLine.Length;
 
         if (this.written >= this.maxBytes)
         {
-            this.file.Dispose();
-            this.Open();
+            // The next line opens a new file, and keeps trying until one opens.
+            this.file = null;
+            file.Dispose();
         }
     }
 

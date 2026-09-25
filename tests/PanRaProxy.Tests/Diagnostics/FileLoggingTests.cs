@@ -69,6 +69,37 @@ public sealed class FileLoggingTests : IDisposable
     }
 
     [Fact]
+    public void A_roll_that_cannot_open_the_next_file_does_not_stop_the_proxy()
+    {
+        using FileLogWriter writer = new(this.directory, "test", maxBytes: 10, retainedFiles: 100);
+
+        // Directories under the names the next files would take: opening them for writing is denied.
+        List<string> blockers = [];
+        for (int second = 0; second < 10; second++)
+        {
+            string stamp = DateTime.Now.AddSeconds(second).ToString("yyyyMMdd-HHmmss");
+            foreach (string name in Enumerable.Range(1, 5).Select(i => i == 1 ? $"test-{stamp}.log" : $"test-{stamp}-{i}.log"))
+            {
+                string path = Path.Combine(this.directory, name);
+                if (!File.Exists(path))
+                {
+                    blockers.Add(Directory.CreateDirectory(path).FullName);
+                }
+            }
+        }
+
+        writer.Write("fills the first file and triggers a roll");
+        writer.Write("lost while no file can be opened");
+        Thread.Sleep(200);
+
+        blockers.ForEach(b => Directory.Delete(b));
+        writer.Write("back after the blockers are gone");
+
+        WaitFor(() => this.Files().Any(f => ReadShared(f).Contains("back after the blockers are gone")));
+        Assert.Contains(this.Files(), f => ReadShared(f).Contains("log lines dropped"));
+    }
+
+    [Fact]
     public void A_directory_that_cannot_be_created_does_not_stop_the_proxy()
     {
         FileLoggingOptions options = new() { Directory = Path.Combine(this.directory, "file.txt", "logs") };
