@@ -242,3 +242,7 @@ ModelManifest.xml
 
 # FAKE - F# Make
 .fake/
+# Live captures: contengono dati personali e consentono attacchi offline al secret RADIUS
+detail-*
+*.pcap
+*.pcapng
