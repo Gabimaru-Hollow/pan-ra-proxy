@@ -19,6 +19,24 @@ namespace Lithnet.Pan.RAProxy
             }
         }
 
+        /// <summary>
+        /// Timeout, in minutes, sent with every login entry. 0 omits it, so the firewall's global User-ID timeout applies.
+        /// Keep it at least twice the NAS interim-update interval.
+        /// </summary>
+        [ConfigurationProperty("login-timeout-minutes", IsRequired = false, DefaultValue = 75)]
+        [IntegerValidator(MinValue = 0, MaxValue = int.MaxValue)]
+        public int LoginTimeoutMinutes
+        {
+            get
+            {
+                return (int)this["login-timeout-minutes"];
+            }
+            set
+            {
+                this["login-timeout-minutes"] = value;
+            }
+        }
+
         [ConfigurationProperty("username-filter", IsRequired = false, DefaultValue = null)]
         public string UsernameFilter
         {

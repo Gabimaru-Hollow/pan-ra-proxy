@@ -60,12 +60,13 @@ namespace Lithnet.Pan.RAProxy
             return e != null && e.Username == this.Username && e.IpAddress == this.IpAddress;
         }
 
+        // Identity is the mapping (username + IP), not the timeout: a login must match the pending logout
+        // for the same user and IP, and only logins carry a timeout.
         public bool Equals(Entry other)
         {
             return !(other is null) &&
                    this.Username == other.Username &&
-                   this.IpAddress == other.IpAddress &&
-                   this.Timeout == other.Timeout;
+                   this.IpAddress == other.IpAddress;
         }
 
         public override int GetHashCode()
@@ -73,7 +74,6 @@ namespace Lithnet.Pan.RAProxy
             int hashCode = -1884528195;
             hashCode = hashCode * -1521134295 + EqualityComparer<string>.Default.GetHashCode(this.Username);
             hashCode = hashCode * -1521134295 + EqualityComparer<string>.Default.GetHashCode(this.IpAddress);
-            hashCode = hashCode * -1521134295 + EqualityComparer<string>.Default.GetHashCode(this.Timeout);
             return hashCode;
         }
     }

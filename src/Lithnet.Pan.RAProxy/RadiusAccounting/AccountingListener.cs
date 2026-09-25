@@ -99,6 +99,13 @@ namespace Lithnet.Pan.RAProxy
                                     throw;
                             }
                         }
+                        catch (Exception ex)
+                        {
+                            // A malformed packet (e.g. an attribute value of unexpected length) used to escape this
+                            // loop and end the listener. Log it and keep listening.
+                            Logging.CounterReceivedDiscardedPerSecond.Increment();
+                            Logging.WriteEntry($"An accounting request could not be processed and was discarded\n{ex}", EventLogEntryType.Error, Logging.EventIDInvalidRadiusPacket);
+                        }
                     }
                 }
             }), token);

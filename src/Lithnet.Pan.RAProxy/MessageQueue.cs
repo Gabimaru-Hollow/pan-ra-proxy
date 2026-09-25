@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Net;
 using System.Runtime.Caching;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,6 +23,15 @@ namespace Lithnet.Pan.RAProxy
         private readonly ManualResetEvent gate = new ManualResetEvent(true);
 
         private MemoryCache failedDomainCache = new MemoryCache("failedDomainCache");
+
+        // Framed-IP-Address values meaning "no real address yet" (RFC 2865 5.8, unassigned). Never map them.
+        private static readonly IPAddress[] PlaceholderAddresses =
+        {
+            IPAddress.Any,
+            IPAddress.Broadcast,
+            IPAddress.Parse("255.255.255.254"),
+            IPAddress.IPv6Any,
+        };
 
         public MessageQueue()
         {
@@ -150,7 +160,7 @@ namespace Lithnet.Pan.RAProxy
                         continue;
                     }
 
-                    foreach (RadiusAttribute v4Address in request.Attributes.Where(t => t.Type == RadiusAttribute.RadiusAttributeType.FramedIPAddress))
+                    foreach (RadiusAttribute v4Address in request.Attributes.Where(t => t.Type == RadiusAttribute.RadiusAttributeType.FramedIPAddress && MessageQueue.IsUsableAddress(t)))
                     {
                         Entry e = new Entry
                         {
@@ -161,7 +171,7 @@ namespace Lithnet.Pan.RAProxy
                         items.Add(e);
                     }
 
-                    foreach (RadiusAttribute v6Address in request.Attributes.Where(t => t.Type == RadiusAttribute.RadiusAttributeType.FramedIPv6Address))
+                    foreach (RadiusAttribute v6Address in request.Attributes.Where(t => t.Type == RadiusAttribute.RadiusAttributeType.FramedIPv6Address && MessageQueue.IsUsableAddress(t)))
                     {
                         Entry e = new Entry
                         {
@@ -175,7 +185,7 @@ namespace Lithnet.Pan.RAProxy
                     if (items.Count == 0)
                     {
                         Logging.CounterIgnoredPerSecond.Increment();
-                        Logging.WriteDebugEntry($"A radius accounting packet was discarded because it did not contain any IP address entries", EventLogEntryType.Warning, Logging.EventIDInvalidRadiusPacket);
+                        Logging.WriteDebugEntry($"A radius accounting packet was discarded because it did not contain any usable IP address (missing or placeholder)", EventLogEntryType.Warning, Logging.EventIDInvalidRadiusPacket);
                         continue;
                     }
 
@@ -197,6 +207,7 @@ namespace Lithnet.Pan.RAProxy
 
                             foreach (Entry e in items)
                             {
+                                e.Timeout = Config.LoginTimeoutMinutes > 0 ? Config.LoginTimeoutMinutes.ToString() : null;
                                 Trace.WriteLine($"Added login entry {e.Username}:{e.IpAddress} from {type}");
                                 message.Payload.Login.Entries.Add(e);
 
@@ -275,6 +286,11 @@ namespace Lithnet.Pan.RAProxy
             {
                 Logging.WriteEntry($"An error occurred while submitting the user-id update\n\n{ex}", EventLogEntryType.Error, Logging.EventIDMessageSendException);
             }
+        }
+
+        private static bool IsUsableAddress(RadiusAttribute attribute)
+        {
+            return attribute.ValueAsIPAddress != null && !MessageQueue.PlaceholderAddresses.Contains(attribute.ValueAsIPAddress);
         }
 
         private string GetTranslatedUsername(AccountingRequest request)

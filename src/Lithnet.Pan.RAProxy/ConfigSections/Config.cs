@@ -73,6 +73,8 @@ namespace Lithnet.Pan.RAProxy
 
         public static bool DebuggingEnabled => Config.section.DebuggingEnabled;
 
+        public static int LoginTimeoutMinutes => Config.section.LoginTimeoutMinutes;
+
         public static int BatchSize => Config.section.PanApi.BatchSize;
 
         public static int BatchWait => Config.section.PanApi.BatchWait;
