@@ -90,6 +90,7 @@ P1-1, P1-2, and P1-3 together with P1-4 are enough for a test alongside the Vect
 | `System.Runtime.Caching.MemoryCache` | `Microsoft.Extensions.Caching.Memory` | |
 | Unbounded `BlockingCollection` | Bounded `System.Threading.Channels` | Fixes P2-4 |
 | 11 `PerformanceCounter`s | `System.Diagnostics.Metrics` | No registration at install time |
+| `EventLog.WriteEntry` to the Application log | Own `PanRaProxy` Event Log, rolling files and console, all through `ILogger` | Event IDs unchanged |
 | `EventLog.WriteEntry` | `ILogger` with the EventLog provider | |
 | `TranslateName` P/Invoke | Unchanged, reached through a domain rule's `Lookup`, with a cache in front of it | |
 | WiX v3 installer (net462, NETWORK SERVICE) | WiX v5 MSI: self-contained executable, virtual account `NT SERVICE\PanRaProxy`, restart on failure, Event Log source, firewall rule; secrets and site settings provided after install ([install.md](install.md), [ADR 0003](adr/0003-secrets-as-protected-files-provided-after-install.md)) | |
@@ -137,8 +138,9 @@ Each step ships with its tests.
 | NFR-03 | Bounded queue, default capacity 10,000 (configurable), dropping the oldest item when full, with a counter of dropped items. |
 | NFR-04 | Minimum metrics: packets received and dropped, Logins and Logouts sent, failed entries, queue depth. |
 | NFR-05 | Dedicated API account with an Admin Role limited to XML API > User-ID Agent. |
-| NFR-07 | Event Log entries keep the upstream event IDs (`Logging.cs`) through `ILogger` `EventId`. |
+| NFR-07 | Event Log entries keep the upstream event IDs (`Logging.cs`) through `ILogger` `EventId`, in the Proxy's own `PanRaProxy` log. |
 | NFR-08 | A fatal listener failure (socket bind or close) stops the process. Windows Service recovery is set to restart it. |
+| NFR-09 | The same executable runs as a service or from a console (`--debug`, `--help`, `--version`), with no installation needed for a trial run. |
 | NFR-06 | No directory lookup is configured while the naming convention holds: in the capture of 2026-09-24 all three username forms use `name.surname`. A `Lookup` rule is added only for accounts where it doesn't. |
 
 ### 5.4 Configuration

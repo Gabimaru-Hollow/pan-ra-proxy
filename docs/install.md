@@ -8,11 +8,12 @@ The MSI (`PanRaProxy.msi`, per-machine, x64) installs the program and registers 
 |---|---|
 | Program | `C:\Program Files\PanRaProxy\PanRaProxy.exe`: one self-contained executable, no .NET prerequisite |
 | Service | `PanRaProxy`, automatic start, runs as the virtual account `NT SERVICE\PanRaProxy`; on failure restarts after 60 s (NFR-08). **Not started by the MSI** unless `START_SERVICE=1` |
-| Event Log | Source `PanRAProxy` in the Application log (upstream's name and event IDs, spec §5.6) |
+| Event Log | Its own `PanRaProxy` log under "Applications and Services Logs", with upstream's event IDs (spec §5.6) |
 | Windows Firewall | Inbound UDP `RADIUS_PORT` for `PanRaProxy.exe` only, optionally limited to `RADIUS_CLIENTS` |
 | Defaults | `appsettings.json` in the install folder: replaced on every upgrade, don't edit |
 | Example | `appsettings.example.json`: a starting point for the site settings |
 | Helper | `Set-PanRaProxySecret.ps1`: sets secrets after installation |
+| Folders | `%ProgramData%\PanRaProxy` and its `logs` subfolder, writable by the service account and kept on uninstall |
 
 ## Public properties
 
@@ -44,7 +45,7 @@ Run these steps in order from the setup tool, elevated.
 
    Secrets are files in `%ProgramData%\PanRaProxy\secrets`, readable only by SYSTEM, Administrators and `NT SERVICE\PanRaProxy`. They are never passed on a command line or through MSI properties, so they don't end up in MSI logs. Called without `-Value` in an interactive session, the script prompts.
 
-4. **Check** that the service is running and that event 4004 ("Listening for RADIUS accounting…") is in the Application log.
+4. **Check** that the service is running and that event 4004 ("Listening for RADIUS accounting…") is in the `PanRaProxy` log, and that a file appeared in `%ProgramData%\PanRaProxy\logs`.
 
 ## Upgrade
 
@@ -61,6 +62,60 @@ msiexec /x PanRaProxy.msi /qn
 ```
 
 This removes the program, the service, the Event Log source and the firewall rule. `%ProgramData%\PanRaProxy` (site settings and secrets) is kept. Delete it yourself if the Proxy won't come back.
+
+## Logs
+
+Three destinations, each filtered on its own through the `Logging` section:
+
+| Destination | Default level | For |
+|---|---|---|
+| `PanRaProxy` Event Log | Warning | Monitoring: failures, rejected Logins/Logouts, unreachable Firewalls |
+| `%ProgramData%\PanRaProxy\logs\panraproxy-*.log` | Information | Day-to-day detail; files roll at 16 MB and the newest 14 are kept |
+| Console | Information, or Debug with `--debug` | Console runs |
+
+The Event Log is the Proxy's own, not the shared Application log, so its entries can be filtered,
+sized and forwarded on their own. Event IDs are unchanged (spec §5.6).
+
+Site settings can change any of it, e.g. quieter files and a bigger cap:
+
+```json
+"Logging": {
+  "File": { "MaxFileSizeMb": 64, "RetainedFiles": 30, "LogLevel": { "Default": "Warning" } },
+  "EventLog": { "LogLevel": { "Default": "Warning" } }
+}
+```
+
+`"File": { "Enabled": false }` turns file logging off. If the folder can't be written, the Proxy
+says so on the console and keeps running with the other two destinations.
+
+### Upgrading from the upstream (net462) Proxy
+
+Event Log source names are case-insensitive, so upstream's `PanRAProxy` source is the same name as
+ours. While it exists, entries keep going to the **Application** log and the Proxy says so at
+startup. Remove it in an elevated PowerShell, then restart the service:
+
+```powershell
+[System.Diagnostics.EventLog]::DeleteEventSource('PanRaProxy')
+```
+
+## Running from a console
+
+The executable runs without the MSI: useful for a trial run, or to watch a live NAS against a lab
+firewall. It needs an elevated session only the first time, to create the Event Log.
+
+```powershell
+$env:RADIUS_SECRET_NPS1 = "..."      # or set the secrets with Set-PanRaProxySecret.ps1
+$env:PAN_API_KEY = "..."
+.\PanRaProxy.exe --debug `
+    --Radius:Port=18131 `
+    --Radius:Clients:0:Host=10.0.0.10 --Radius:Clients:0:SecretName=RADIUS_SECRET_NPS1 `
+    --Firewalls:Endpoints:0=https://fw-a.example/api/
+```
+
+`--debug` logs the Proxy's own categories at Debug, so every dropped packet states its reason.
+`--help` prints the usage and `--version` the build. Any setting can be overridden as
+`--Section:Key=value`, which is also how the end-to-end replay drives the Proxy
+([testing.md](testing.md)).
 
 ## Exit codes
 
@@ -85,4 +140,4 @@ This runs the tests, publishes the self-contained executable to `artifacts\publi
 
 ## Coexistence with the upstream (net462) Proxy
 
-Both use the Event Log source `PanRAProxy` and default to UDP 18131, and their service names differ only in case (`panraproxy` / `PanRaProxy`), which Windows treats as the same. Don't install both on the same server.
+Their service names differ only in case (`panraproxy` / `PanRaProxy`), their Event Log source names are the same name case-insensitively, and both default to UDP 18131. Don't install both on the same server: uninstall the upstream one first, then remove its Event Log source as described above.

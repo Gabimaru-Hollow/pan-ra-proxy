@@ -2,7 +2,7 @@
 <!--
   PAN RADIUS Accounting Proxy: per-machine x64 MSI (WiX v5).
 
-  Installs the service (virtual account NT SERVICE\PanRaProxy, restart on failure), the Event Log source,
+  Installs the service (virtual account NT SERVICE\PanRaProxy, restart on failure), its own Event Log,
   a Windows Firewall rule for RADIUS accounting, the default settings and Set-PanRaProxySecret.ps1.
   Never carries secrets or site settings: those are provided after installation (docs/install.md).
 
@@ -37,10 +37,19 @@
       <Directory Id="INSTALLFOLDER" Name="PanRaProxy" />
     </StandardDirectory>
 
+    <!-- Site settings, secrets and logs: created here so the service account can write them,
+         and kept on uninstall (docs/install.md). -->
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATAFOLDER" Name="PanRaProxy">
+        <Directory Id="LOGSFOLDER" Name="logs" />
+      </Directory>
+    </StandardDirectory>
+
     <Feature Id="Proxy" Title="PAN RADIUS Accounting Proxy" Level="1">
       <ComponentGroupRef Id="Service" />
       <ComponentGroupRef Id="Settings" />
       <ComponentGroupRef Id="FirewallRule" />
+      <ComponentGroupRef Id="DataFolders" />
     </Feature>
   </Package>
 
@@ -75,10 +84,11 @@
         <ServiceControl Id="StartOnInstall" Name="PanRaProxy" Start="install" Wait="yes" />
       </Component>
 
-      <!-- Upstream's source name, so existing Event Log filters keep matching (NFR-07). -->
+      <!-- The Proxy's own log under "Applications and Services Logs", not the shared Application log.
+           Event IDs stay upstream's (NFR-07). -->
       <Component Id="EventLogSource" Bitness="always64">
-        <util:EventSource Name="PanRAProxy"
-                          Log="Application"
+        <util:EventSource Name="PanRaProxy"
+                          Log="PanRaProxy"
                           EventMessageFile="[%SystemRoot]\Microsoft.NET\Framework64\v4.0.30319\EventLogMessages.dll"
                           KeyPath="yes" />
       </Component>
@@ -95,6 +105,24 @@
       </Component>
       <Component Id="ExampleSettings" Bitness="always64">
         <File Id="AppSettingsExample" Source="$(var.PayloadDir)appsettings.example.json" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="DataFolders">
+      <Component Id="DataFolder" Directory="DATAFOLDER" Bitness="always64" Permanent="yes">
+        <RegistryValue Root="HKLM" Key="SOFTWARE\PanRaProxy" Name="DataFolder" Type="string" Value="[DATAFOLDER]" KeyPath="yes" />
+        <CreateFolder>
+          <util:PermissionEx User="PanRaProxy" Domain="NT SERVICE" GenericRead="yes" GenericExecute="yes" />
+        </CreateFolder>
+      </Component>
+
+      <Component Id="LogsFolder" Directory="LOGSFOLDER" Bitness="always64" Permanent="yes">
+        <RegistryValue Root="HKLM" Key="SOFTWARE\PanRaProxy" Name="LogsFolder" Type="string" Value="[LOGSFOLDER]" KeyPath="yes" />
+        <CreateFolder>
+          <util:PermissionEx User="PanRaProxy" Domain="NT SERVICE"
+                             GenericRead="yes" GenericWrite="yes" GenericExecute="yes"
+                             Delete="yes" CreateFile="yes" CreateChild="yes" DeleteChild="yes" />
+        </CreateFolder>
       </Component>
     </ComponentGroup>
 

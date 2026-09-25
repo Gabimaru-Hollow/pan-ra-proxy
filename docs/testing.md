@@ -2,6 +2,10 @@
 
 Two levels: unit and module tests in `tests/PanRaProxy.Tests` (`dotnet test`), and an end-to-end replay of a live capture against the real Proxy.
 
+`dotnet test` also leaves the uid-messages its in-process end-to-end test produced in
+`artifacts/tests/*.uid-messages.log`, one section per Batch with the Logins and Logouts and the raw
+XML, so a run can be read afterwards instead of only asserted on.
+
 ## End-to-end replay of a live capture
 
 `tools/e2e/live-replay.py` runs the whole path on one machine, with no installation and no administrator rights:
@@ -34,7 +38,14 @@ Exit code 0 means the Mappings match the capture. Useful options:
 | `--batch-window-ms` | Changes the Batch window, to see its effect on the number of calls |
 | `--radius-port`, `--https-port` | When the defaults are taken |
 
-Output: the console shows the live Batches and the summary; `artifacts/e2e/proxy.log` holds the Proxy's own log (run at Debug level, so dropped packets show their reason).
+Output, all under `artifacts/` and none of it in the repository:
+
+| File | Content |
+|---|---|
+| `artifacts/e2e/proxy.log` | The Proxy's own log, at Debug level, so dropped packets show their reason |
+| `artifacts/e2e/mock-requests.jsonl` | One line per call the mock received: time, whether the `X-PAN-KEY` header was there, the entries, and the raw `uid-message` |
+| `artifacts/e2e/mappings.csv` | Every Mapping sent, with how many times it was sent and whether the detail file expected it |
+| `artifacts/e2e/run.log` | The console transcript |
 
 ### Captures
 
