@@ -16,6 +16,12 @@ internal static partial class Log
     [LoggerMessage(2001, LogLevel.Warning, "Firewall certificate validation is disabled (Firewalls:DisableCertificateValidation). The Firewall's TLS certificate is not checked.")]
     public static partial void CertificateValidationDisabled(ILogger logger);
 
+    [LoggerMessage(2002, LogLevel.Warning, "The Event Log is not used: {Reason}")] // new
+    public static partial void EventLogNotUsed(ILogger logger, string reason);
+
+    [LoggerMessage(2003, LogLevel.Warning, "This session can't read the secrets folder {Directory}: every secret will look unset. Run from an elevated prompt.")] // new
+    public static partial void SecretsFolderUnreadable(ILogger logger, string directory);
+
     [LoggerMessage(2101, LogLevel.Warning, "Could not translate {Upn}: not found in the directory")]
     public static partial void NameNotFound(ILogger logger, string upn);
 
@@ -90,4 +96,7 @@ internal static partial class Log
 
     [LoggerMessage(4005, LogLevel.Debug, "Dropped {Request}: {Reason}")] // new
     public static partial void RequestDropped(ILogger logger, AccountingRequest request, DropReason reason);
+
+    [LoggerMessage(4006, LogLevel.Information, "No log files: {Directory} doesn't exist, and a console run creates nothing on the machine")] // new
+    public static partial void FileLogNotUsed(ILogger logger, string directory);
 }

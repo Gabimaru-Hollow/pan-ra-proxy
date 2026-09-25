@@ -9,7 +9,7 @@ public static class DiagnosticsRegistration
     /// <summary>
     /// The Proxy's own Event Log, under "Applications and Services Logs" in Event Viewer, instead of
     /// the shared Application log: its entries can be filtered, sized and forwarded on their own.
-    /// The MSI creates it; a console run creates it too when started elevated.
+    /// The MSI creates it. The Proxy itself never does: a console run must leave nothing behind on the machine.
     /// </summary>
     public const string EventLogName = "PanRaProxy";
 
@@ -29,38 +29,34 @@ public static class DiagnosticsRegistration
     }
 
     /// <summary>
-    /// Registers the Event Log and its source when they don't exist yet, which needs administrator
-    /// rights. Returns the reason it couldn't, or null on success: the Proxy runs either way, it just
-    /// logs to the console and to file instead.
+    /// Why the Proxy can't write to its Event Log, or null when it can. Only reads the registry: the
+    /// Proxy never creates the log or its source (the MSI does). When this isn't null, the Event Log
+    /// provider must not be added at all, because it would register a missing source under the
+    /// Application log on its first entry.
     /// </summary>
     [SupportedOSPlatform("windows")]
-    public static string? EnsureEventLog()
+    public static string? EventLogProblem()
     {
         try
         {
-            if (EventLog.SourceExists(EventLogSource))
+            if (!EventLog.SourceExists(EventLogSource))
             {
-                string current = EventLog.LogNameFromSourceName(EventLogSource, ".");
-
-                // Source names are case-insensitive, so upstream's "PanRAProxy" under Application is the
-                // same name as ours. Entries keep going to that log until the old source is removed.
-                return current == EventLogName
-                    ? null
-                    : $"the source '{EventLogSource}' still writes to the '{current}' log, left by an earlier install, "
-                      + $"so entries go there instead of the '{EventLogName}' log. In an elevated PowerShell: "
-                      + $"[System.Diagnostics.EventLog]::DeleteEventSource('{EventLogSource}'), then start the Proxy again.";
+                return $"the '{EventLogName}' Event Log doesn't exist on this machine: the MSI creates it.";
             }
 
-            EventLog.CreateEventSource(new EventSourceCreationData(EventLogSource, EventLogName));
-            return null;
-        }
-        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException)
-        {
-            return $"the Event Log '{EventLogName}' doesn't exist and creating it needs an elevated session.";
+            string current = EventLog.LogNameFromSourceName(EventLogSource, ".");
+
+            // Source names are case-insensitive, so upstream's "PanRAProxy" under Application is the
+            // same name as ours, left by an earlier install.
+            return current == EventLogName
+                ? null
+                : $"the source '{EventLogSource}' writes to the '{current}' log, left by an earlier install. In an elevated PowerShell: "
+                  + $"[System.Diagnostics.EventLog]::DeleteEventSource('{EventLogSource}'), then repair the MSI.";
         }
         catch (Exception ex)
         {
-            return $"the Event Log '{EventLogName}' is unavailable: {ex.Message}";
+            // A session without administrator rights can't search every log for a missing source.
+            return $"the '{EventLogName}' Event Log can't be checked from this session: {ex.Message}";
         }
     }
 

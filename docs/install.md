@@ -94,8 +94,9 @@ again within 30 minutes (ADR 0004).
 ### Upgrading from the upstream (net462) Proxy
 
 Event Log source names are case-insensitive, so upstream's `PanRAProxy` source is the same name as
-ours. While it exists, entries keep going to the **Application** log and the Proxy says so at
-startup. Remove it in an elevated PowerShell, then restart the service:
+ours. While it points at the **Application** log, the Proxy doesn't use the Event Log and says so at
+startup (event 2002). An earlier console run of a pre-release build can leave the same key behind.
+Remove it in an elevated PowerShell, repair the MSI, then restart the service:
 
 ```powershell
 [System.Diagnostics.EventLog]::DeleteEventSource('PanRaProxy')
@@ -103,8 +104,12 @@ startup. Remove it in an elevated PowerShell, then restart the service:
 
 ## Running from a console
 
-The executable runs without the MSI: useful for a trial run, or to watch a live NAS against a lab
-firewall. It needs an elevated session only the first time, to create the Event Log.
+The same executable runs outside the service: for diagnostics, for a live check against a lab
+firewall, or on a machine without the MSI. **A console run leaves nothing behind.** It writes to the
+`PanRaProxy` Event Log and to `%ProgramData%\PanRaProxy\logs` only if the MSI created them, and it never
+creates registry keys or folders. It says at startup what it isn't using (events 2002 and 4006). An
+elevated prompt is needed only to read the installed secrets (event 2003 otherwise); secrets in
+environment variables work from any prompt.
 
 ```powershell
 $env:RADIUS_SECRET_NPS1 = "..."      # or set the secrets with Set-PanRaProxySecret.ps1
@@ -116,7 +121,11 @@ $env:PAN_API_KEY = "..."
 ```
 
 `--debug` logs the Proxy's own categories at Debug, so every dropped packet states its reason.
-`--help` prints the usage and `--version` the build. Any setting can be overridden as
+`--check-config` builds everything the service would (settings, secrets, the RADIUS Clients' names,
+the CA file), reports every problem as event 3106 on the console and exits: 0 when valid, 1 when not.
+It doesn't listen, and it writes no log file and no Event Log entry. Use it after editing the site
+settings, before restarting the service. `--help` prints the usage and `--version` the build. An
+unknown option exits with 2 instead of starting, so a typo can't start the Proxy. Any setting can be overridden as
 `--Section:Key=value`, which is also how the end-to-end replay drives the Proxy
 ([testing.md](testing.md)).
 
@@ -127,7 +136,9 @@ $env:PAN_API_KEY = "..."
 | `msiexec` | 0 / 3010 | Success / success, reboot required (not expected) |
 | `msiexec` | 1603 | Failure: see the `/l*v` log. With `START_SERVICE=1`, check event 3106 first |
 | `Set-PanRaProxySecret.ps1` | 0 / 1 | Success / failure (not elevated, service not installed, empty value, service didn't reach Running within 30 s) |
+| `PanRaProxy.exe` | 0 | Stopped normally; `--check-config`: the configuration is valid |
 | `PanRaProxy.exe` | 1 | Invalid configuration (event 3106 lists every problem) or listener failure (event 3103) |
+| `PanRaProxy.exe` | 2 | Unknown option on the command line |
 
 ## When the service doesn't start
 

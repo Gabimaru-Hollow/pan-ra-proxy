@@ -72,7 +72,7 @@ internal sealed class FileLoggerProvider : ILoggerProvider
         }
 
         string directory = string.IsNullOrWhiteSpace(settings.Directory)
-            ? Path.Combine(ProxyPaths.DataDirectory, "logs")
+            ? ProxyPaths.LogsDirectory
             : settings.Directory;
 
         try

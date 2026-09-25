@@ -10,9 +10,9 @@ Reviewed at `ed83069` on `refactor/net8-fork`, with 150 tests green. The review 
 | 2 | [Canonical Username as its own module](#2-canonical-username-as-its-own-module) | Done |
 | 3 | [A domain rule that validates itself](#3-a-domain-rule-that-validates-itself) | Done |
 | 4 | [Break the Diagnostics hub](#4-break-the-diagnostics-hub) | Rejected ([ADR 0005](adr/0005-log-messages-stay-in-one-file.md)) |
-| 5 | [Make startup a module, not a script](#5-make-startup-a-module-not-a-script) | Worth exploring |
-| 6 | [Split failover from submission](#6-split-failover-from-submission) | Speculative |
-| 7–11 | [Second pass: fragilities](#second-pass-fragilities) | 7–10 fixed; 11 mostly |
+| 5 | [Make startup a module, not a script](#5-make-startup-a-module-not-a-script) | Done |
+| 6 | [Split failover from submission](#6-split-failover-from-submission) | On hold |
+| 7–11 | [Second pass: fragilities](#second-pass-fragilities) | Fixed |
 
 Suggested order: 1 first, because it is cheap and protects the evidence the rest rests on; then 2 and 3 together, because they are the same change seen from two sides. The [validation agenda](#validation-agenda) at the end says what each candidate has to answer before it is worth doing.
 
@@ -115,6 +115,10 @@ The regexes are still compiled twice at startup, once by the validator and once 
 
 **What improves.** The documented exit codes become assertions. `--help` and `--version` get pinned. The Event Log fallback path can be tested with a fake instead of a machine.
 
+**Outcome.** Done (2026-09-25), because the console surface grew: `--check-config` was wanted. `Startup/CommandLine.cs` parses the switches, and an unknown one exits 2 instead of being passed to configuration, where a typo such as `--chek-config` would have started the Proxy. `Startup/ProxyStartup.Run` goes from arguments to an exit code, and `Program.cs` is one call. `ProxyStartupTests` pins the switches, the exit codes and `--check-config`.
+
+The discussion added a requirement: the same binary runs in a console for diagnostics and live checks, and **a console run must leave nothing behind on the machine**. That exposed a defect in the old startup. `EnsureEventLog` created the Event Log from an elevated console. Worse, the Microsoft Event Log provider registers a missing source under the Application log on its first entry, which is the most likely way the development machine ended up with `PanRaProxy` under Application. Now the Proxy never creates the log or its source: `DiagnosticsRegistration.EventLogProblem` only reads the registry, and the provider is added only when the source exists and writes to the Proxy's own log. Log files follow the same rule: a console run writes them only if the logs folder exists. The MSI creates both.
+
 ---
 
 ## 6. Split failover from submission
@@ -124,6 +128,8 @@ The regexes are still compiled twice at startup, once by the validator and once 
 **Problem.** None observed. The module is already deep: one method, with the uid-message, the `X-PAN-KEY` header, the per-attempt timeout, ordered failover and the response parsing behind it, and its tests go through that one interface.
 
 **Solution, if ever.** Separate the failover policy (order, stickiness, what counts as unreachable) from one attempt against one Firewall.
+
+**On hold (2026-09-25)** until the HA question below is answered.
 
 **Why speculative.** There is one adapter, so the seam would be hypothetical. Revisit if a second policy appears: sending to both HA peers, or a health check. See also the open question in [deployment.md](deployment.md) about how the passive HA peer answers.
 
@@ -164,8 +170,8 @@ Now an empty `Nt4Domain`, `Replace` or `Lookup` on a domain rule is rejected at 
 
 **Open, low priority.**
 - **DRY.** *Fixed with candidate 3.* The validator compiled regexes with `IgnoreCase`, while the decision module used `IgnoreCase | CultureInvariant`.
-- **SRP / discoverability.** *Half fixed.* `MappingDecisionSink` became `MappingDecisionWorker`, in a file of its own. `BatchSender` still lives in `FirewallRegistration.cs`.
-- **DIP.** `Func<string, IPAddress[]>` is a DI key. A raw `Func` is an ambiguous key: any other `Func` of the same shape would collide. The other adapters are named delegates (`SecretLookup`, `ProcessExit`).
+- **SRP / discoverability.** *Fixed.* `MappingDecisionSink` became `MappingDecisionWorker`, and `BatchSender` moved to `Firewall/BatchSender.cs`.
+- **DIP.** *Fixed.* `Func<string, IPAddress[]>` was a DI key: an ambiguous one, since any other `Func` of the same shape would collide. It is now the named delegate `HostResolver`, like `SecretLookup` and `ProcessExit`.
 - **KISS / YAGNI.** *Done.* The rolling file logger was 265 lines of our own code, and it held finding 7. Serilog's file sink now writes the files, behind `ILogger` and known only to `Diagnostics/FileLogging.cs` ([ADR 0004](adr/0004-file-log-through-serilog-behind-ilogger.md)).
 
 ---

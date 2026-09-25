@@ -22,6 +22,9 @@ public static class ProxyPaths
 
     /// <summary>One file per secret, readable only by the service account and Administrators (NFR-01).</summary>
     public static string SecretsDirectory { get; } = Path.Combine(DataDirectory, "secrets");
+
+    /// <summary>Rolling log files; the MSI creates the folder.</summary>
+    public static string LogsDirectory { get; } = Path.Combine(DataDirectory, "logs");
 }
 
 /// <summary>
@@ -36,6 +39,23 @@ public static partial class SecretStore
     public static bool IsValidName(string name) => ValidName().IsMatch(name);
 
     public static string? Read(string name) => Read(name, ProxyPaths.SecretsDirectory);
+
+    /// <summary>
+    /// True when the folder exists but this session can't list it (its ACL admits only the service
+    /// account and Administrators): every secret in it would then look unset.
+    /// </summary>
+    public static bool IsUnreadable(string directory)
+    {
+        try
+        {
+            _ = Directory.Exists(directory) && Directory.EnumerateFiles(directory).Any();
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return true;
+        }
+    }
 
     public static string? Read(string name, string directory)
     {
