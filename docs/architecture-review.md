@@ -6,12 +6,13 @@ Reviewed at `ed83069` on `refactor/net8-fork`, with 150 tests green. The review 
 
 | # | Candidate | Strength |
 |---|---|---|
-| 1 | [One composition root](#1-one-composition-root) | Strong |
+| 1 | [One composition root](#1-one-composition-root) | Done |
 | 2 | [Canonical Username as its own module](#2-canonical-username-as-its-own-module) | Strong |
 | 3 | [A domain rule that validates itself](#3-a-domain-rule-that-validates-itself) | Strong |
 | 4 | [Break the Diagnostics hub](#4-break-the-diagnostics-hub) | Worth exploring |
 | 5 | [Make startup a module, not a script](#5-make-startup-a-module-not-a-script) | Worth exploring |
 | 6 | [Split failover from submission](#6-split-failover-from-submission) | Speculative |
+| 7–11 | [Second pass: fragilities](#second-pass-fragilities) | Two fixed, three open |
 
 Suggested order: 1 first, because it is cheap and protects the evidence the rest rests on; then 2 and 3 together, because they are the same change seen from two sides. The [validation agenda](#validation-agenda) at the end says what each candidate has to answer before it is worth doing.
 
@@ -38,6 +39,13 @@ Four registration modules also re-declare the same shared adapters with `TryAdd`
 **Deletion test.** Deleting it puts the ordering and the shared adapters back into every caller: complexity concentrates, so it earns its keep.
 
 **What improves.** Locality: one place says how the Proxy is built. Leverage: one call for every caller, including future ones (a replay tool, a config-check command). The test exercises what ships.
+
+**Outcome.** Done: `ProxyRegistration.AddPanRaProxy` declares the shared adapters once, and the five per-area registrations are now `internal`. The discussion corrected two statements above:
+
+- *"The order the five calls run in is load-bearing"* was wrong. Every `TryAdd` of a type registered the same implementation, so reordering the five changed nothing. What was load-bearing was where the test put its replacements: `SecretLookup` and `ProcessExit` had to go before the five (the first `TryAdd` wins), `FirewallClient` after them (the last `Add` wins). Now every replacement comes after `AddPanRaProxy`, through `services.Replace`.
+- *"Replace the `HttpMessageHandler`"* wasn't possible: the handler isn't a service, and it is built inline with the certificate trust. The test still replaces `FirewallClient`, as before, which adds no seam to production code.
+
+The deciding question (a real cost, or already paid?) was settled by the alternative collapsing: a test comparing the two graphs can't reach `Program`'s, which is made of top-level statements. The same change also closed [finding 8](#8-configuration-problems-that-bypass-event-3106), and the first build after it showed the old drift again: the hand-assembled test graph failed as soon as `TimeProvider` moved to the root.
 
 ---
 
@@ -108,6 +116,38 @@ A fourth action would have to be added in both places, and nothing fails if only
 **Solution, if ever.** Separate the failover policy (order, stickiness, what counts as unreachable) from one attempt against one Firewall.
 
 **Why speculative.** There is one adapter, so the seam would be hypothetical. Revisit if a second policy appears: sending to both HA peers, or a health check. See also the open question in [deployment.md](deployment.md) about how the passive HA peer answers.
+
+---
+
+## Second pass: fragilities
+
+A second, deeper pass over the whole of `src/PanRaProxy`, looking for fragile choices and checking it against SOLID, DRY, KISS and YAGNI. What held up: the RADIUS parsing is pure, the closed result types (`PacketVerdict`, `MappingDecision`, `SubmissionResult`) are used as intended, `TimeProvider` is injected everywhere, the Batch timer is simple, and certificate trust is scoped to the Firewall client.
+
+### 7. A failed log roll ended the process
+
+**Fixed.** `FileLogWriter` caught only `IOException` on its own thread. An `UnauthorizedAccessException` while opening the next file ended the process (reproduced), and an `IOException` there left the writer on a closed stream, so the next line did the same. Now a line that can't be written is counted, the next line tries to open a file again, and the count is written as soon as one opens. `FileLoggingTests.A_roll_that_cannot_open_the_next_file_does_not_stop_the_proxy` pins it.
+
+### 8. Configuration problems that bypass event 3106
+
+**Fixed, with candidate 1.** [install.md](install.md) promises exit code 1 and event 3106 for an invalid configuration, but three problems only appeared in constructors when the host started: a RADIUS Client that doesn't resolve, one address with two secrets, and a `CaFile` that exists but can't be loaded. They surfaced as an unhandled exception instead. `StartupValidation` now builds the hosted services once the options are valid and reports a construction failure in 3106, while the DNS and certificate errors are turned into messages that name the setting. Construction stops at the first problem, so these come one at a time.
+
+### 9. A directory lookup can stall the listener
+
+**Open.** `IAccountingRequestSink` says "Must not block": the listener calls it inline. With a `Lookup` rule, a cache miss calls `TranslateNameW` synchronously (`Mappings/NameTranslation.cs`) on that path. With a slow or unreachable domain controller, the receive loop waits: the current packet is already acknowledged, but the next datagrams queue in the socket buffer. The likely moment is the burst of Interim-Updates after a domain controller outage.
+
+`Lookup` is needed in production (2026-09-25). Clients authenticate with bare names, UPNs of several suffixes, and NT4 names. NPS resolves them itself because its host is domain-joined, but accounting reaches the Proxy from the NAS side, and User-ID needs one Canonical Username (the sAMAccountName form). So this finding has to be fixed. The direction is to resolve the Canonical Username off the listener's path, which is also where [candidate 2](#2-canonical-username-as-its-own-module) would put it.
+
+### 10. `Replace` means two different things
+
+**Open.** A Username Rewrite applies `Regex.Replace`, which substitutes the matched part. A domain rule's `Replace` applies `Match.Result`, where the template is the whole result. With `Match: "@domain\.local$"` and `Replace: ""`, the rewrite turns `mrossi@domain.local` into `mrossi`, but the rule turns it into an empty string. The validator accepts it (it checks only for null), so the Firewall would receive a Login with an empty username. Username Rewrites stay, confirmed needed on 2026-09-25, so the fix is to reject an empty result and to make the difference visible in the names or the documentation. It belongs with candidates 2 and 3.
+
+### 11. Smaller points
+
+**Open, low priority.**
+- **DRY.** The validator compiles regexes with `IgnoreCase` (`OptionsValidators.cs`), while the decision module uses `IgnoreCase | CultureInvariant` (`MappingDecider.cs`). This adds to candidate 3.
+- **SRP / discoverability.** `BatchSender` and `MappingDecisionSink` live in files named `…Registration.cs`. Anyone looking for how Batches are sent won't open them there.
+- **DIP.** `Func<string, IPAddress[]>` is a DI key. A raw `Func` is an ambiguous key: any other `Func` of the same shape would collide. The other adapters are named delegates (`SecretLookup`, `ProcessExit`).
+- **KISS / YAGNI.** The rolling file logger is 265 lines of our own code, and it held finding 7. Keeping it rather than taking a dependency is a choice worth an ADR, either way.
 
 ---
 

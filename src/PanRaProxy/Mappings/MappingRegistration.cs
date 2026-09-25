@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using PanRaProxy.Diagnostics;
 using PanRaProxy.Options;
@@ -6,12 +5,10 @@ using PanRaProxy.Radius;
 
 namespace PanRaProxy.Mappings;
 
-public static class MappingRegistration
+internal static class MappingRegistration
 {
     public static IServiceCollection AddMappingDecision(this IServiceCollection services)
     {
-        services.TryAddSingleton(TimeProvider.System);
-
         services.AddSingleton<INameTranslator>(sp =>
         {
             DomainOptions domain = sp.GetRequiredService<IOptions<UserIdOptions>>().Value.Domain;

@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using PanRaProxy.Diagnostics;
 using PanRaProxy.Mappings;
@@ -6,13 +5,10 @@ using PanRaProxy.Options;
 
 namespace PanRaProxy.Firewall;
 
-public static class FirewallRegistration
+internal static class FirewallRegistration
 {
     public static IServiceCollection AddFirewallSubmission(this IServiceCollection services)
     {
-        services.TryAddSingleton(TimeProvider.System);
-        services.TryAddSingleton<SecretLookup>(SecretStore.Read);
-
         services.AddSingleton(sp =>
         {
             FirewallOptions options = sp.GetRequiredService<IOptions<FirewallOptions>>().Value;

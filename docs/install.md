@@ -130,6 +130,8 @@ $env:PAN_API_KEY = "..."
 
 Event **3106** lists every configuration problem at once: missing RADIUS Clients or Firewalls, an invalid regex, or a secret that isn't set (with the exact `Set-PanRaProxySecret.ps1` command). The service exits with code 1, and Windows retries every 60 s until the configuration is fixed.
 
+When the settings themselves are valid, 3106 also reports what only shows up while the Proxy is being built: a RADIUS Client host name that doesn't resolve, or a `Firewalls:CaFile` the service account can't read or that holds no certificate. These come one at a time: fix the first, and the next start reports the following one.
+
 ## Building the MSI
 
 ```powershell

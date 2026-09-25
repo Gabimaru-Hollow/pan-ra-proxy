@@ -34,9 +34,17 @@ public sealed class RadiusClientRegistry
             string secret = secrets(client.SecretName)
                             ?? throw new InvalidOperationException($"Secret '{client.SecretName}' for RADIUS Client '{client.Host}' is not set.");
 
-            IPAddress[] addresses = IPAddress.TryParse(client.Host, out IPAddress? literal)
-                ? [literal]
-                : resolve(client.Host).Where(a => a.AddressFamily == AddressFamily.InterNetwork).ToArray();
+            IPAddress[] addresses;
+            try
+            {
+                addresses = IPAddress.TryParse(client.Host, out IPAddress? literal)
+                    ? [literal]
+                    : resolve(client.Host).Where(a => a.AddressFamily == AddressFamily.InterNetwork).ToArray();
+            }
+            catch (SocketException ex)
+            {
+                throw new InvalidOperationException($"RADIUS Client '{client.Host}' did not resolve: {ex.Message}", ex);
+            }
 
             if (addresses.Length == 0)
             {

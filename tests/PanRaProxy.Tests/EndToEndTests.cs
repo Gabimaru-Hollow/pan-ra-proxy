@@ -4,6 +4,7 @@ using System.Threading.Channels;
 using System.Xml.Linq;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -44,21 +45,19 @@ public class EndToEndTests(Xunit.Abstractions.ITestOutputHelper output)
         builder.Logging.AddProvider(logs);
         builder.Logging.SetMinimumLevel(LogLevel.Debug);
 
-        builder.Services.AddSingleton<SecretLookup>(name => name switch
+        // The graph that ships, with only the machine and the Firewall's transport replaced.
+        builder.Services.AddPanRaProxy(builder.Configuration);
+        builder.Services.Replace(ServiceDescriptor.Singleton(new SecretLookup(name => name switch
         {
             "RADIUS_SECRET" => RadiusFixtures.Clients.Values.First(),
             "PAN_API_KEY" => "lab-key",
             _ => null,
-        });
-        builder.Services.AddSingleton(new ProcessExit(code => throw new InvalidOperationException($"exit {code}")));
-        builder.Services.AddProxyOptions(builder.Configuration);
-        builder.Services.AddProxyDiagnostics();
-        builder.Services.AddMappingDecision();
-        builder.Services.AddRadiusAccounting();
-        builder.Services.AddFirewallSubmission();
-        builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<FirewallClient>(sp, new HttpClient(new RecordingFirewall(firewallCommands.Writer))));
+        })));
+        builder.Services.Replace(ServiceDescriptor.Singleton(new ProcessExit(code => throw new InvalidOperationException($"exit {code}"))));
+        builder.Services.Replace(ServiceDescriptor.Singleton(sp => ActivatorUtilities.CreateInstance<FirewallClient>(sp, new HttpClient(new RecordingFirewall(firewallCommands.Writer)))));
 
         using IHost host = builder.Build();
+        Assert.True(StartupValidation.Validate(host.Services));
         await host.StartAsync();
 
         using UdpClient radius = new(new IPEndPoint(IPAddress.Loopback, 0));

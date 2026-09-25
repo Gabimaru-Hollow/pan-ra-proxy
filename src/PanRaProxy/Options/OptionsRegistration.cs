@@ -1,11 +1,10 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace PanRaProxy.Options;
 
-public static class OptionsRegistration
+internal static class OptionsRegistration
 {
     /// <summary>
     /// Binds and validates every options section. Validation runs at host start, so a bad
@@ -13,8 +12,6 @@ public static class OptionsRegistration
     /// </summary>
     public static IServiceCollection AddProxyOptions(this IServiceCollection services, IConfiguration configuration)
     {
-        services.TryAddSingleton<SecretLookup>(SecretStore.Read);
-
         services.AddOptions<RadiusOptions>().Bind(configuration.GetSection(RadiusOptions.SectionName)).ValidateOnStart();
         services.AddOptions<UserIdOptions>().Bind(configuration.GetSection(UserIdOptions.SectionName)).ValidateOnStart();
         services.AddOptions<FirewallOptions>().Bind(configuration.GetSection(FirewallOptions.SectionName)).ValidateOnStart();

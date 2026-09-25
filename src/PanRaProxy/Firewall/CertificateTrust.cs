@@ -1,4 +1,5 @@
 using System.Net.Security;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using PanRaProxy.Options;
 
@@ -60,15 +61,24 @@ public static class CertificateTrust
     private static X509Certificate2Collection LoadCertificates(string path)
     {
         X509Certificate2Collection certificates = [];
-        string text = File.ReadAllText(path);
 
-        if (text.Contains("-----BEGIN CERTIFICATE-----", StringComparison.Ordinal))
+        try
         {
-            certificates.ImportFromPem(text);
+            string text = File.ReadAllText(path);
+
+            if (text.Contains("-----BEGIN CERTIFICATE-----", StringComparison.Ordinal))
+            {
+                certificates.ImportFromPem(text);
+            }
+            else
+            {
+                certificates.Add(new X509Certificate2(path)); // DER
+            }
         }
-        else
+        catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException)
         {
-            certificates.Add(new X509Certificate2(path)); // DER
+            // Unreadable for the service account, or not a PEM or DER certificate.
+            throw new InvalidOperationException($"Firewalls:CaFile '{path}' can't be loaded: {ex.Message}", ex);
         }
 
         if (certificates.Count == 0)

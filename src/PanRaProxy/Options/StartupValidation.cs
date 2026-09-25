@@ -9,6 +9,11 @@ public static class StartupValidation
     /// Validates every options section and logs all failures together (event 3106), so an administrator
     /// sees the whole list instead of the first problem only. False means the Proxy must not start.
     /// </summary>
+    /// <remarks>
+    /// With valid options it then builds the modules, so what only construction finds out (a RADIUS Client
+    /// that doesn't resolve, a CaFile that holds no certificate) is reported the same way. Construction
+    /// stops at the first such problem.
+    /// </remarks>
     public static bool Validate(IServiceProvider services)
     {
         List<string> failures = [];
@@ -16,6 +21,18 @@ public static class StartupValidation
         Collect<RadiusOptions>(services, failures);
         Collect<UserIdOptions>(services, failures);
         Collect<FirewallOptions>(services, failures);
+
+        if (failures.Count == 0)
+        {
+            try
+            {
+                _ = services.GetServices<IHostedService>().ToList();
+            }
+            catch (InvalidOperationException ex)
+            {
+                failures.Add(ex.Message);
+            }
+        }
 
         if (failures.Count == 0)
         {

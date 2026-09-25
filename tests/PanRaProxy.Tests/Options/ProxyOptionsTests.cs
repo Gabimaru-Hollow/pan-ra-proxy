@@ -1,5 +1,8 @@
+using System.Net;
+using System.Net.Sockets;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -236,6 +239,79 @@ public class ProxyOptionsTests
         using ServiceProvider provider = BuildProvider();
 
         Assert.True(StartupValidation.Validate(new LoggingProvider(provider)));
+    }
+
+    [Fact]
+    public void Startup_validation_passes_the_whole_proxy_with_a_valid_configuration()
+    {
+        CollectingLoggerProvider logs = new();
+        using ServiceProvider provider = BuildProxy([], logs);
+
+        Assert.True(StartupValidation.Validate(provider));
+        Assert.Empty(logs.Entries);
+    }
+
+    [Fact]
+    public void Startup_validation_reports_a_radius_client_that_does_not_resolve()
+    {
+        CollectingLoggerProvider logs = new();
+        using ServiceProvider provider = BuildProxy(
+            new() { ["Radius:Clients:0:Host"] = "nps.invalid" },
+            logs,
+            _ => throw new SocketException((int)SocketError.HostNotFound));
+
+        Assert.False(StartupValidation.Validate(provider));
+
+        (int id, string message) = Assert.Single(logs.Entries);
+        Assert.Equal(3106, id);
+        Assert.Contains("RADIUS Client 'nps.invalid' did not resolve", message);
+    }
+
+    [Fact]
+    public void Startup_validation_reports_a_ca_file_that_holds_no_certificate()
+    {
+        string caFile = Path.GetTempFileName();
+        File.WriteAllText(caFile, "not a certificate");
+
+        try
+        {
+            CollectingLoggerProvider logs = new();
+            using ServiceProvider provider = BuildProxy(new() { ["Firewalls:CaFile"] = caFile }, logs);
+
+            Assert.False(StartupValidation.Validate(provider));
+
+            (int id, string message) = Assert.Single(logs.Entries);
+            Assert.Equal(3106, id);
+            Assert.Contains($"Firewalls:CaFile '{caFile}'", message);
+        }
+        finally
+        {
+            File.Delete(caFile);
+        }
+    }
+
+    /// <summary>
+    /// The graph that ships, with only the machine replaced: secrets, and name resolution when given.
+    /// </summary>
+    private static ServiceProvider BuildProxy(Dictionary<string, string?> overrides, CollectingLoggerProvider logs, Func<string, IPAddress[]>? resolve = null)
+    {
+        Dictionary<string, string?> config = new(ValidConfig);
+        foreach (KeyValuePair<string, string?> pair in overrides)
+        {
+            config[pair.Key] = pair.Value;
+        }
+
+        ServiceCollection services = new();
+        services.AddLogging(b => b.AddProvider(logs));
+        services.AddPanRaProxy(new ConfigurationBuilder().AddInMemoryCollection(config).Build());
+        services.Replace(ServiceDescriptor.Singleton(new SecretLookup(name => ValidEnvironment.GetValueOrDefault(name))));
+
+        if (resolve is not null)
+        {
+            services.Replace(ServiceDescriptor.Singleton(resolve));
+        }
+
+        return services.BuildServiceProvider();
     }
 
     private sealed class LoggingProvider(IServiceProvider inner) : IServiceProvider

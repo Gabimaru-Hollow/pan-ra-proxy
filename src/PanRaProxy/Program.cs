@@ -1,9 +1,7 @@
 using System.Reflection;
+using PanRaProxy;
 using PanRaProxy.Diagnostics;
-using PanRaProxy.Firewall;
-using PanRaProxy.Mappings;
 using PanRaProxy.Options;
-using PanRaProxy.Radius;
 
 // Switches handled here; everything else is configuration (--Section:Key=value).
 bool debug = args.Any(a => a is "--debug" or "-d");
@@ -40,11 +38,7 @@ if (debug)
 }
 
 builder.Services.AddWindowsService(options => options.ServiceName = "PanRaProxy");
-builder.Services.AddProxyOptions(builder.Configuration);
-builder.Services.AddProxyDiagnostics();
-builder.Services.AddMappingDecision();
-builder.Services.AddRadiusAccounting();
-builder.Services.AddFirewallSubmission();
+builder.Services.AddPanRaProxy(builder.Configuration);
 
 if (OperatingSystem.IsWindows() && DiagnosticsRegistration.EnsureEventLog() is { } eventLogProblem)
 {
