@@ -13,7 +13,7 @@ Reviewed at `ed83069` on `refactor/net8-fork`, with 150 tests green. The review 
 | 5 | [Make startup a module, not a script](#5-make-startup-a-module-not-a-script) | Worth exploring |
 | 6 | [Split failover from submission](#6-split-failover-from-submission) | Speculative |
 
-Suggested order: 1 first, because it is cheap and protects the evidence the rest rests on; then 2 and 3 together, because they are the same change seen from two sides.
+Suggested order: 1 first, because it is cheap and protects the evidence the rest rests on; then 2 and 3 together, because they are the same change seen from two sides. The [validation agenda](#validation-agenda) at the end says what each candidate has to answer before it is worth doing.
 
 ---
 
@@ -110,6 +110,41 @@ A fourth action would have to be added in both places, and nothing fails if only
 **Why speculative.** There is one adapter, so the seam would be hypothetical. Revisit if a second policy appears: sending to both HA peers, or a health check. See also the open question in [deployment.md](deployment.md) about how the passive HA peer answers.
 
 ---
+
+## Validation agenda
+
+These candidates were written by the author of the code they criticise, so the first job of the
+discussion is to attack them, not to plan them. For each one: the question that decides it, what
+would answer that question, and what to do with a "no".
+
+**How to close each item.** Accepted → implement it, keep the tests green and rerun the end-to-end
+replay (`--speed 30`, about 30 s) to check the observable behaviour didn't move. Rejected for a
+reason a future reader would need → record an ADR, so the next review doesn't propose it again.
+Deferred → say so here, with what would bring it back.
+
+**Order is not free.** Candidate 1 changes the composition, which is what the end-to-end test uses as
+its safety net: do it first, while the net is still the one that has been proving the code. Candidates
+2 and 3 touch the same area and should be decided together. Candidate 5 is independent. Candidate 4
+deserves a decision before any code, because its cost is documentary.
+
+**A caution about the evidence.** The git history is ten commits old, so "how often has this file
+changed" proves nothing yet. The real evidence is in the week of 2026-09-22: the username rules were
+reworked twice (`c80b458`), and the end-to-end test had to have `AddProxyDiagnostics` added by hand
+when the metrics arrived. Where a candidate rests on churn, say whether that churn is expected to
+continue.
+
+| # | The question that decides it | What would answer it | If the answer is no |
+|---|---|---|---|
+| 1 | Is the duplicated composition a real cost, or a one-off already paid? | Whether the registrations are expected to keep changing (metrics, a config-check command, a replay tool), and whether a test asserting "the test's graph equals `Program`'s" would be enough instead | Probably no ADR: the reason is ephemeral |
+| 2 | Are the username rules still going to move? | The AD spot-check on `name.surname`: if the convention holds everywhere, the rules freeze and the split buys less. Also decide the interface: plain `string → string`, or a result that says which rule matched, which would let the Proxy count non-canonical Mappings | ADR worth writing: "the Canonical Username rules stay inside the Mapping decision because …" |
+| 3 | Should an invalid rule be unrepresentable, or is validation-at-startup enough? | Whether configuration will ever be reloaded without a restart. If it never is, compiling once at startup may already be sufficient, and the duplication is only the `user`-group check | ADR if rejected on the "two statements of the same rule are fine because …" ground |
+| 4 | Does the event-ID table need to live in one file? | How the spec §5.6 table and NFR-07 would be kept honest with the messages spread across modules: a shared constants file, or a test that reads the IDs and compares them with the table | Likely rejected: then record why, because the cycle is visible and someone will propose this again |
+| 5 | Which startup behaviours must be pinned by a test? | The list of things an administrator depends on: exit codes, `--help`, `--version`, the Event Log fallback message. If the console surface is going to grow (say a `--check-config`), the module is justified now rather than later | No ADR needed: it is a question of when, not whether |
+| 6 | Is a second failover policy coming? | The open question in [deployment.md](deployment.md): how the passive HA peer answers a User-ID call. If it answers with an API error, the failover rule itself has to change, and that is the moment to reconsider | ADR: "failover stays inside the Firewall submission module until a second policy exists" |
+
+**Two questions that sit above the list.** First: is there a candidate missing, something that has actually
+hurt while working in this code and isn't here? Second: which of these would you not want done even if
+free, because it would make the code harder to read for whoever operates it?
 
 ## Not in scope here
 
