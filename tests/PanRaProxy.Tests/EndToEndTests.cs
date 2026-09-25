@@ -19,11 +19,12 @@ namespace PanRaProxy.Tests;
 /// <summary>
 /// The whole Proxy in-process: accounting in over UDP, uid-message out to a scripted Firewall.
 /// </summary>
-public class EndToEndTests
+public class EndToEndTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     [Fact]
     public async Task Accounting_start_reaches_the_firewall_as_a_login_and_stop_does_not()
     {
+        List<string> uidMessages = [];
         int port = FreeUdpPort();
         Channel<string> firewallCommands = Channel.CreateUnbounded<string>();
 
@@ -68,7 +69,8 @@ public class EndToEndTests
         }
 
         using CancellationTokenSource wait = new(TimeSpan.FromSeconds(5));
-        XElement message = XElement.Parse(await firewallCommands.Reader.ReadAsync(wait.Token));
+        uidMessages.Add(await firewallCommands.Reader.ReadAsync(wait.Token));
+        XElement message = XElement.Parse(uidMessages[0]);
 
         Assert.Equal(
             [(@"CONTOSO\mrossi", "10.20.30.40", "15"), (@"DOMAIN\mrossi", "10.20.30.41", "15")],
@@ -83,6 +85,13 @@ public class EndToEndTests
         }
 
         await host.StopAsync();
+
+        while (firewallCommands.Reader.TryRead(out string? extra))
+        {
+            uidMessages.Add(extra);
+        }
+
+        output.WriteLine($"uid-messages: {TestArtifacts.WriteUidMessages(nameof(this.Accounting_start_reaches_the_firewall_as_a_login_and_stop_does_not), uidMessages)}");
 
         // Upstream event IDs (NFR-07): 4001 accepted, 4002 Batch applied, 4003 filtered; new 4004 listening, 4005 dropped.
         Assert.Contains(4004, logs.EventIds);

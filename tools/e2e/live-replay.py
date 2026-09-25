@@ -14,8 +14,10 @@ Example:
 """
 import argparse
 import collections
+import csv
 import datetime
 import http.server
+import json
 import ipaddress
 import os
 import pathlib
@@ -36,6 +38,7 @@ PLACEHOLDER_IPS = {"0.0.0.0", "255.255.255.255", "255.255.255.254"}
 start_time = time.monotonic()
 received = []          # (kind, username, ip, timeout) in arrival order
 batches = []           # entries per POST
+requests_file = None   # artifacts/e2e/mock-requests.jsonl, one line per call
 lock = threading.Lock()
 
 
@@ -83,6 +86,16 @@ def make_handler(reject):
                 received.extend(entries)
                 batches.append(entries)
                 number = len(batches)
+                if requests_file is not None:
+                    requests_file.write(json.dumps({
+                        "batch": number,
+                        "at": datetime.datetime.now().isoformat(timespec="milliseconds"),
+                        "elapsed": round(time.monotonic() - start_time, 3),
+                        "apiKeyHeader": bool(key),
+                        "entries": [{"kind": k, "name": n, "ip": i, "timeout": t} for k, n, i, t in entries],
+                        "cmd": command,
+                    }) + "\n")
+                    requests_file.flush()
 
             logins = sum(1 for e in entries if e[0] == "login")
             logouts = len(entries) - logins
@@ -326,6 +339,11 @@ def main():
 
     work = ROOT / "artifacts" / "e2e"
     work.mkdir(parents=True, exist_ok=True)
+
+    global requests_file
+    requests_path = work / "mock-requests.jsonl"
+    mappings_path = work / "mappings.csv"
+    requests_file = requests_path.open("w", encoding="utf-8")
     cert_file, key_file = self_signed_cert(work)
     proxy_log = work / "proxy.log"
 
@@ -397,7 +415,18 @@ def main():
     shared = {n: c for n, c in per_user.items() if c > 1}
     log("RESULT", f"users holding several Mappings (shared accounts): {len(shared)}"
                   + (f", up to {max(shared.values())} IPs" if shared else ""))
-    print(f"\nProxy log: {proxy_log}")
+    if requests_file is not None:
+        requests_file.close()
+
+    with mappings_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["kind", "username", "ip", "timeout_minutes", "times_sent", "expected"])
+        for (kind, name, ip, timeout), count in sorted(collections.Counter(received).items()):
+            writer.writerow([kind, name, ip, timeout or "", count, "yes" if (name, ip) in expected else "no"])
+
+    print(f"\nProxy log:      {proxy_log}")
+    print(f"Mock requests:  {requests_path}")
+    print(f"Mappings table: {mappings_path}")
     return 0 if not missing and not unexpected else 1
 
 
