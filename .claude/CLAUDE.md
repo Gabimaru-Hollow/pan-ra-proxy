@@ -8,3 +8,21 @@ In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the re
 
 If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
 <!-- CODEGRAPH_END -->
+
+## Start here
+
+This is a fork of `lithnet/pan-ra-proxy`. It turns RADIUS accounting into Palo Alto User-ID Mappings.
+Read these before changing anything, in this order:
+
+1. **`CONTEXT.md`** — the glossary. Use these words (Mapping, Login, Logout, Batch, Canonical Username, Placeholder IP, Shared Account, RADIUS Client, Firewall) in code, tests, logs and commits.
+2. **`docs/adr/`** — decisions already taken. Don't re-litigate them; amend the ADR if one turns out wrong.
+3. **`docs/refactoring-spec.md`** — requirements (FR/NFR), the code review of the upstream, the configuration and the event IDs and metrics (§5.6).
+4. **`docs/deployment.md`** — the environment and the evidence measured from the live capture.
+5. **`docs/architecture-review.md`** — open candidates for deepening the .NET 8 code. Candidates, not decisions.
+
+Also: `docs/install.md` (MSI, secrets, logs, console runs) and `docs/testing.md` (`dotnet test` plus the end-to-end replay of a live capture).
+
+Two things to know before running anything:
+
+- `src/PanRaProxy` is the .NET 8 service under development. `src/Lithnet.Pan.RAProxy` is the upstream net462 code, kept only until the parallel test with Vector is signed off; it carries the four P1 fixes and nothing else.
+- Live captures (`detail-*`, `*.pcap`) hold real usernames and IPs and allow an offline attack on the RADIUS shared secret. They are git-ignored, and anything derived from them that gets committed must be anonymised.

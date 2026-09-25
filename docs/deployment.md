@@ -48,6 +48,8 @@ A 9-minute capture of the accounting NPS forwards (125 Accounting-Requests, 37 u
 | Shared Accounts | 5 users on several IPs, up to 4 at once; no IP shared by two users |
 | Roams | 15 user+IP pairs with more than one `Acct-Session-Id` |
 | Machine Accounts | none in this window, so the Username Filter is untested against live data |
+| Username convention | `name.surname` in all three forms: 11 of 11 NT4 names, 11 of 12 UPN prefixes and 12 of 13 bare names contain a dot. The domain rules can therefore build the Canonical Username without a directory lookup (NFR-06). |
+| Spurious Stops | Of 34 Stops, **22 are followed by a Start or Interim-Update for the same user and IP** (median 3 s later, at most 161 s); only 12 end a session. With Logout-on-Stop on, roughly two Stops in three would remove a Mapping while the client is still connected. |
 
 ## Blocking prerequisite
 
