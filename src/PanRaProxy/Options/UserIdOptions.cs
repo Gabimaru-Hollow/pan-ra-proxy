@@ -31,8 +31,6 @@ public sealed class UserIdOptions
     /// </summary>
     public DomainOptions Domain { get; set; } = new();
 
-    public bool NameTranslation { get; set; }
-
     /// <summary>
     /// Matched against the raw User-Name, before any Username Rewrite. The default drops Machine Accounts.
     /// </summary>
@@ -53,29 +51,4 @@ public sealed class UsernameRewriteOptions
     public string Match { get; set; } = "";
 
     public string Replace { get; set; } = "";
-}
-
-/// <summary>
-/// The domain rules that turn the three username forms seen on the wire (bare, UPN, NT4) into the
-/// Canonical Username. All optional: a form with no rule configured is passed through unchanged.
-/// </summary>
-public sealed class DomainOptions
-{
-    /// <summary>
-    /// NT4 domain given to a bare username (no '\' and no '@'), e.g. "XDOMAIN".
-    /// </summary>
-    public string? DefaultNt4Domain { get; set; }
-
-    /// <summary>
-    /// UPN suffix assumed for a bare username when Name Translation is on, e.g. "xdomain.local".
-    /// Without it, a bare username can't be looked up in the directory.
-    /// </summary>
-    public string? DefaultUpnSuffix { get; set; }
-
-    /// <summary>
-    /// UPN suffix to NT4 domain, e.g. {"xdomain.local": "XDOMAIN", "example.com": "XDOMAIN"}.
-    /// Used when Name Translation is off or fails. It assumes the UPN prefix equals the account name;
-    /// where that isn't true, only Name Translation gives the right Canonical Username.
-    /// </summary>
-    public Dictionary<string, string> UpnSuffixes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

@@ -229,10 +229,13 @@ def start_proxy(args, cert_file, https_port, log_file):
         f"--UserId:LogoutOnStop={'true' if args.logout_on_stop else 'false'}",
         f"--UserId:BatchWindowMs={args.batch_window_ms}",
     ]
+    # Domain rules, in the same order the oracle applies them: known UPN suffixes first, bare names last.
+    rules = [(rf"^(?<user>[^@\\]+)@{re.escape(suffix)}$", domain) for suffix, domain in args.upn_suffixes.items()]
     if args.nt4_domain:
-        settings.append(f"--UserId:Domain:DefaultNt4Domain={args.nt4_domain}")
-    for index, (suffix, domain) in enumerate(args.upn_suffixes.items()):
-        settings.append(f"--UserId:Domain:UpnSuffixes:{suffix}={domain}")
+        rules.append((r"^(?<user>[^@\\]+)$", args.nt4_domain))
+    for index, (pattern, domain) in enumerate(rules):
+        settings.append(f"--UserId:Domain:Rules:{index}:Match={pattern}")
+        settings.append(f"--UserId:Domain:Rules:{index}:Nt4Domain={domain}")
 
     environment = dict(os.environ, RADIUS_SECRET=args.secret, PAN_API_KEY="e2e-dummy-key",
                        DOTNET_ENVIRONMENT="Development", Logging__LogLevel__PanRaProxy="Debug")

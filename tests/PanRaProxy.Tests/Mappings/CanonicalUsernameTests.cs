@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.Time.Testing;
 using PanRaProxy.Mappings;
 using PanRaProxy.Options;
 using PanRaProxy.Radius;
@@ -8,28 +9,24 @@ using PanRaProxy.Radius;
 namespace PanRaProxy.Tests.Mappings;
 
 /// <summary>
-/// The three username forms seen in the live capture: bare (no domain), UPN with several suffixes,
-/// and NT4. Shared accounts (one user on several IPs) are covered here too.
+/// The domain rules, against the three username forms seen in the live capture: bare (no domain),
+/// UPN with several suffixes, and NT4. Shared Accounts are covered here too.
 /// </summary>
 public class CanonicalUsernameTests
 {
-    private static UserIdOptions Options() => new()
-    {
-        Domain = new DomainOptions
-        {
-            DefaultNt4Domain = "XDOMAIN",
-            DefaultUpnSuffix = "xdomain.local",
-            UpnSuffixes = new(StringComparer.OrdinalIgnoreCase)
-            {
-                ["xdomain.local"] = "XDOMAIN",
-                ["example.com"] = "XDOMAIN",
-            },
-        },
-    };
+    private const string BareUser = @"^(?<user>[^@\\]+)$";
+    private const string AnyUpn = @"^(?<user>[^@\\]+)@(?<suffix>.+)$";
 
-    private static MappingDecider Decider(Action<UserIdOptions>? configure = null, INameTranslator? translator = null)
+    /// <summary>The rules a site like the captured one would configure.</summary>
+    private static List<DomainRuleOptions> SiteRules() =>
+    [
+        new() { Match = @"^(?<user>[^@\\]+)@(xdomain\.local|example\.com)$", Nt4Domain = "XDOMAIN" },
+        new() { Match = BareUser, Nt4Domain = "XDOMAIN" },
+    ];
+
+    private static MappingDecider Decider(List<DomainRuleOptions>? rules = null, INameTranslator? translator = null, Action<UserIdOptions>? configure = null)
     {
-        UserIdOptions options = Options();
+        UserIdOptions options = new() { Domain = new DomainOptions { Rules = rules ?? SiteRules() } };
         configure?.Invoke(options);
         return new MappingDecider(Microsoft.Extensions.Options.Options.Create(options), translator ?? new NoNameTranslation());
     }
@@ -52,56 +49,123 @@ public class CanonicalUsernameTests
     private static IReadOnlyList<MappingChange> Changes(MappingDecision decision) =>
         Assert.IsType<MappingDecision.Changes>(decision).Items;
 
+    private static string Username(MappingDecider decider, string raw) =>
+        Assert.Single(Changes(decider.Decide(Request(raw, "10.99.10.73")))).Mapping.Username;
+
     [Theory]
-    [InlineData("fabio.manfre", @"XDOMAIN\fabio.manfre")]              // bare: default domain
-    [InlineData("fabio.manfre@xdomain.local", @"XDOMAIN\fabio.manfre")] // known suffix
-    [InlineData("fabio.manfre@example.com", @"XDOMAIN\fabio.manfre")]   // second suffix, same domain
-    [InlineData(@"XDOMAIN\fmanfre", @"XDOMAIN\fmanfre")]                // already NT4
-    [InlineData("fabio.manfre@unknown.test", "fabio.manfre@unknown.test")] // unknown suffix: unchanged
-    public void Domain_rules_produce_the_canonical_username(string raw, string canonical)
+    [InlineData("fabio.manfre", @"XDOMAIN\fabio.manfre")]                // bare
+    [InlineData("fabio.manfre@xdomain.local", @"XDOMAIN\fabio.manfre")]  // first suffix
+    [InlineData("fabio.manfre@example.com", @"XDOMAIN\fabio.manfre")]    // second suffix, same domain
+    [InlineData(@"XDOMAIN\fabio.manfre", @"XDOMAIN\fabio.manfre")]       // already NT4: no rule matches
+    [InlineData("guest@partner.test", "guest@partner.test")]             // unmapped suffix: unchanged
+    public void First_matching_rule_decides(string raw, string canonical)
     {
-        Assert.Equal(canonical, Assert.Single(Changes(Decider().Decide(Request(raw, "10.99.10.73")))).Mapping.Username);
+        Assert.Equal(canonical, Username(Decider(), raw));
     }
 
     [Fact]
-    public void Without_domain_rules_every_form_is_passed_through()
+    public void Rules_are_tried_in_order()
     {
-        MappingDecider decider = Decider(o => o.Domain = new DomainOptions());
+        List<DomainRuleOptions> rules =
+        [
+            new() { Match = @"^(?<user>[^@\\]+)@contractors\.example$", Nt4Domain = "PARTNER" },
+            new() { Match = AnyUpn, Nt4Domain = "XDOMAIN" },
+        ];
 
-        Assert.Equal("fabio.manfre", Assert.Single(Changes(decider.Decide(Request("fabio.manfre", "10.99.10.73")))).Mapping.Username);
-        Assert.Equal("fabio.manfre@xdomain.local", Assert.Single(Changes(decider.Decide(Request("fabio.manfre@xdomain.local", "10.99.10.73")))).Mapping.Username);
+        Assert.Equal(@"PARTNER\anna", Username(Decider(rules), "anna@contractors.example"));
+        Assert.Equal(@"XDOMAIN\bruno", Username(Decider(rules), "bruno@xdomain.local"));
     }
 
     [Fact]
-    public void Name_translation_wins_over_the_suffix_map_when_the_account_name_differs()
+    public void Replace_builds_the_name_from_any_group()
     {
-        // The live capture suggests sAMAccountName isn't name.surname: only a directory lookup gets this right.
-        FakeTranslator translator = new()
+        List<DomainRuleOptions> rules =
+        [
+            new() { Match = @"^(?<first>[^.@\\]+)\.(?<last>[^@\\]+)@(?<suffix>.+)$", Replace = @"XDOMAIN\${last}.${first}" },
+        ];
+
+        Assert.Equal(@"XDOMAIN\manfre.fabio", Username(Decider(rules), "fabio.manfre@xdomain.local"));
+    }
+
+    [Fact]
+    public void Lookup_asks_the_directory_and_wins()
+    {
+        // For the accounts where the naming convention doesn't hold, only the directory is right.
+        FakeTranslator translator = new() { ["fabio.manfre@xdomain.local"] = @"XDOMAIN\fmanfre" };
+        List<DomainRuleOptions> rules =
+        [
+            new() { Match = BareUser, Lookup = "${user}@xdomain.local", Nt4Domain = "XDOMAIN" },
+            new() { Match = AnyUpn, Lookup = "${user}@${suffix}", Nt4Domain = "XDOMAIN" },
+        ];
+
+        Assert.Equal(@"XDOMAIN\fmanfre", Username(Decider(rules, translator), "fabio.manfre"));
+        Assert.Equal(@"XDOMAIN\fmanfre", Username(Decider(rules, translator), "fabio.manfre@xdomain.local"));
+    }
+
+    [Fact]
+    public void Lookup_that_fails_falls_back_to_the_rule()
+    {
+        List<DomainRuleOptions> rules =
+        [
+            new() { Match = BareUser, Lookup = "${user}@xdomain.local", Nt4Domain = "XDOMAIN" },
+            new() { Match = AnyUpn, Lookup = "${user}@${suffix}" },
+        ];
+        MappingDecider decider = Decider(rules, new FakeTranslator());
+
+        Assert.Equal(@"XDOMAIN\unknown", Username(decider, "unknown"));          // falls back to Nt4Domain
+        Assert.Equal("unknown@partner.test", Username(decider, "unknown@partner.test")); // no fallback: unchanged
+    }
+
+    [Fact]
+    public void Lookups_are_cached_so_interim_updates_do_not_hit_the_directory_again()
+    {
+        FakeTranslator translator = new() { ["fabio.manfre@xdomain.local"] = @"XDOMAIN\fmanfre" };
+        FakeTimeProvider time = new();
+        CachingNameTranslator caching = new(translator, time, TimeSpan.FromMinutes(480));
+
+        for (int i = 0; i < 5; i++)
         {
-            ["fabio.manfre@xdomain.local"] = @"XDOMAIN\fmanfre",
-        };
-        MappingDecider decider = Decider(o => o.NameTranslation = true, translator);
+            Assert.Equal(@"XDOMAIN\fmanfre", caching.TryTranslateToNt4("fabio.manfre@xdomain.local"));
+        }
 
-        Assert.Equal(@"XDOMAIN\fmanfre", Assert.Single(Changes(decider.Decide(Request("fabio.manfre@xdomain.local", "10.99.10.73")))).Mapping.Username);
+        Assert.Single(translator.Calls);
 
-        // A bare username is looked up through the default UPN suffix.
-        Assert.Equal(@"XDOMAIN\fmanfre", Assert.Single(Changes(decider.Decide(Request("fabio.manfre", "10.99.10.73")))).Mapping.Username);
+        time.Advance(TimeSpan.FromMinutes(481));
+        Assert.Equal(@"XDOMAIN\fmanfre", caching.TryTranslateToNt4("fabio.manfre@xdomain.local"));
+        Assert.Equal(2, translator.Calls.Count);
     }
 
     [Fact]
-    public void Failed_translation_falls_back_to_the_suffix_map()
+    public void Failed_lookups_are_retried_sooner_than_successful_ones()
     {
-        MappingDecider decider = Decider(o => o.NameTranslation = true, new FakeTranslator());
+        FakeTranslator translator = new();
+        FakeTimeProvider time = new();
+        CachingNameTranslator caching = new(translator, time, TimeSpan.FromMinutes(480));
 
-        Assert.Equal(@"XDOMAIN\fabio.manfre", Assert.Single(Changes(decider.Decide(Request("fabio.manfre@example.com", "10.99.10.73")))).Mapping.Username);
+        Assert.Null(caching.TryTranslateToNt4("unknown@xdomain.local"));
+        Assert.Null(caching.TryTranslateToNt4("unknown@xdomain.local"));
+        Assert.Single(translator.Calls);
+
+        time.Advance(TimeSpan.FromMinutes(6));
+        Assert.Null(caching.TryTranslateToNt4("unknown@xdomain.local"));
+        Assert.Equal(2, translator.Calls.Count);
     }
 
     [Fact]
     public void Rewrite_rules_run_before_the_domain_rules()
     {
-        MappingDecider decider = Decider(o => o.UsernameRewrites = [new UsernameRewriteOptions { Match = "^guest-(.+)$", Replace = "$1@example.com" }]);
+        MappingDecider decider = Decider(configure: o => o.UsernameRewrites = [new UsernameRewriteOptions { Match = "^guest-(.+)$", Replace = "$1@example.com" }]);
 
-        Assert.Equal(@"XDOMAIN\anna", Assert.Single(Changes(decider.Decide(Request("guest-anna", "10.99.10.73")))).Mapping.Username);
+        Assert.Equal(@"XDOMAIN\anna", Username(decider, "guest-anna"));
+    }
+
+    [Fact]
+    public void Without_rules_every_form_is_passed_through()
+    {
+        MappingDecider decider = Decider([]);
+
+        Assert.Equal("fabio.manfre", Username(decider, "fabio.manfre"));
+        Assert.Equal("fabio.manfre@xdomain.local", Username(decider, "fabio.manfre@xdomain.local"));
     }
 
     [Fact]
@@ -116,7 +180,7 @@ public class CanonicalUsernameTests
     }
 
     [Fact]
-    public void Shared_account_mappings_do_not_collapse_in_a_batch()
+    public async Task Shared_account_mappings_do_not_collapse_in_a_batch()
     {
         MappingBatcher batcher = new(Microsoft.Extensions.Options.Options.Create(new UserIdOptions { BatchWindowMs = 0 }), TimeProvider.System);
         foreach (MappingChange change in Changes(Decider().Decide(Request("fabio.manfre", "10.99.10.73", "10.99.10.74"))))
@@ -124,13 +188,19 @@ public class CanonicalUsernameTests
             batcher.Enqueue(change);
         }
 
-        Batch batch = batcher.ReadBatchAsync(CancellationToken.None).GetAwaiter().GetResult();
+        Batch batch = await batcher.ReadBatchAsync(CancellationToken.None);
 
         Assert.Equal(2, batch.Changes.Count);
     }
 
     private sealed class FakeTranslator : Dictionary<string, string>, INameTranslator
     {
-        public string? TryTranslateToNt4(string upn) => this.GetValueOrDefault(upn);
+        public List<string> Calls { get; } = [];
+
+        public string? TryTranslateToNt4(string upn)
+        {
+            this.Calls.Add(upn);
+            return this.GetValueOrDefault(upn);
+        }
     }
 }

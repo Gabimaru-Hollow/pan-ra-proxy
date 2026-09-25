@@ -8,8 +8,8 @@ namespace PanRaProxy.Mappings;
 
 /// <summary>
 /// Decides what an accepted Accounting-Request means for Mappings: Username Filter on the raw
-/// User-Name, Username Rewrite and optional Name Translation to the Canonical Username,
-/// Placeholder IP removal, Login with Timeout on Start/Interim-Update, Logout-on-Stop.
+/// User-Name, Username Rewrite and the domain rules to the Canonical Username, Placeholder IP
+/// removal, Login with Timeout on Start/Interim-Update, Logout-on-Stop.
 /// </summary>
 public sealed class MappingDecider
 {
@@ -27,6 +27,7 @@ public sealed class MappingDecider
     private readonly INameTranslator nameTranslator;
     private readonly Regex? usernameFilter;
     private readonly (Regex Match, string Replace)[] usernameRewrites;
+    private readonly DomainRule[] domainRules;
     private readonly TimeSpan timeout;
 
     public MappingDecider(IOptions<UserIdOptions> options, INameTranslator nameTranslator)
@@ -41,6 +42,10 @@ public sealed class MappingDecider
 
         this.usernameRewrites = this.options.UsernameRewrites
             .Select(r => (CreateRegex(r.Match), r.Replace))
+            .ToArray();
+
+        this.domainRules = this.options.Domain.Rules
+            .Select(r => new DomainRule(CreateRegex(r.Match), r.Nt4Domain, r.Replace, r.Lookup))
             .ToArray();
     }
 
@@ -82,9 +87,8 @@ public sealed class MappingDecider
     }
 
     /// <summary>
-    /// Username Rewrite rules first, then the domain rules for the three forms seen on the wire:
-    /// NT4 (kept), UPN (translated, or its suffix mapped to a domain) and bare (given the default
-    /// UPN suffix and translated, or the default domain). A form with no rule is passed through.
+    /// Username Rewrite rules first (an escape hatch), then the first matching domain rule.
+    /// A username no rule matches is passed through unchanged.
     /// </summary>
     private string ToCanonicalUsername(string rawUsername)
     {
@@ -95,41 +99,32 @@ public sealed class MappingDecider
             username = match.Replace(username, replace);
         }
 
-        DomainOptions domain = this.options.Domain;
-
-        if (username.Contains('\\'))
+        foreach (DomainRule rule in this.domainRules)
         {
-            return username; // already NT4
+            Match match = rule.Match.Match(username);
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            if (rule.Lookup is { } lookup && this.nameTranslator.TryTranslateToNt4(match.Result(lookup)) is { } translated)
+            {
+                return translated;
+            }
+
+            if (rule.Nt4Domain is { } domain)
+            {
+                return $"{domain}\\{match.Result("${user}")}";
+            }
+
+            return rule.Replace is { } replacement ? match.Result(replacement) : username;
         }
 
-        if (username.Contains('@'))
-        {
-            return this.FromUpn(username, domain);
-        }
-
-        if (this.options.NameTranslation && !string.IsNullOrEmpty(domain.DefaultUpnSuffix)
-            && this.nameTranslator.TryTranslateToNt4($"{username}@{domain.DefaultUpnSuffix}") is { } translatedBare)
-        {
-            return translatedBare;
-        }
-
-        return string.IsNullOrEmpty(domain.DefaultNt4Domain) ? username : $"{domain.DefaultNt4Domain}\\{username}";
-    }
-
-    private string FromUpn(string upn, DomainOptions domain)
-    {
-        if (this.options.NameTranslation && this.nameTranslator.TryTranslateToNt4(upn) is { } translated)
-        {
-            return translated;
-        }
-
-        string suffix = upn[(upn.LastIndexOf('@') + 1)..];
-
-        return domain.UpnSuffixes.TryGetValue(suffix, out string? nt4Domain) && !string.IsNullOrEmpty(nt4Domain)
-            ? $"{nt4Domain}\\{upn[..upn.LastIndexOf('@')]}"
-            : upn;
+        return username;
     }
 
     private static Regex CreateRegex(string pattern) =>
         new(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, OptionsChecks.RegexMatchTimeout);
+
+    private sealed record DomainRule(Regex Match, string? Nt4Domain, string? Replace, string? Lookup);
 }

@@ -13,9 +13,19 @@ public static class MappingRegistration
         services.TryAddSingleton(TimeProvider.System);
 
         services.AddSingleton<INameTranslator>(sp =>
-            sp.GetRequiredService<IOptions<UserIdOptions>>().Value.NameTranslation && OperatingSystem.IsWindows()
-                ? ActivatorUtilities.CreateInstance<WindowsNameTranslator>(sp)
-                : new NoNameTranslation());
+        {
+            DomainOptions domain = sp.GetRequiredService<IOptions<UserIdOptions>>().Value.Domain;
+
+            if (!domain.Rules.Any(r => r.Lookup is not null) || !OperatingSystem.IsWindows())
+            {
+                return new NoNameTranslation();
+            }
+
+            return new CachingNameTranslator(
+                ActivatorUtilities.CreateInstance<WindowsNameTranslator>(sp),
+                sp.GetRequiredService<TimeProvider>(),
+                TimeSpan.FromMinutes(domain.LookupCacheMinutes));
+        });
 
         services.AddSingleton<MappingDecider>();
         services.AddSingleton<MappingBatcher>();

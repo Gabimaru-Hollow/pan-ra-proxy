@@ -30,6 +30,7 @@ Exit code 0 means the Mappings match the capture. Useful options:
 | `--speed 1` | Original timing: the 9-minute capture takes 9 minutes, and Batches form as they would in production |
 | `--logout-on-stop` | Turns Logout-on-Stop on, in the Proxy and in the expectation |
 | `--reject <text>` | The mock rejects entries whose username contains that text, to exercise per-entry failures (events 3007/3008) |
+| `--nt4-domain`, `--upn-suffix` | Turned into `UserId:Domain:Rules` for the Proxy, and applied by the script to compute the expectation |
 | `--batch-window-ms` | Changes the Batch window, to see its effect on the number of calls |
 | `--radius-port`, `--https-port` | When the defaults are taken |
 

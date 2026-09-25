@@ -145,28 +145,6 @@ public class MappingDeciderTests
         Assert.Equal(@"CONTOSO\mrossi-x", Single(decider.Decide(Request(AcctStatusType.Start, @"corp\mrossi", "10.20.30.40"))).Mapping.Username);
     }
 
-    [Fact]
-    public void Name_translation_runs_only_when_on_and_only_for_a_upn_left_after_rewrite()
-    {
-        FakeTranslator translator = new() { ["mario.rossi@other.example"] = @"OTHER\mrossi" };
-
-        MappingDecider off = Decider(translator: translator);
-        MappingDecider on = Decider(o => o.NameTranslation = true, translator);
-
-        Assert.Equal("mario.rossi@other.example", Single(off.Decide(Request(AcctStatusType.Start, "mario.rossi@other.example", "10.20.30.40"))).Mapping.Username);
-        Assert.Equal(@"OTHER\mrossi", Single(on.Decide(Request(AcctStatusType.Start, "mario.rossi@other.example", "10.20.30.40"))).Mapping.Username);
-        Assert.Equal(@"DOMAIN\mrossi", Single(on.Decide(Request(AcctStatusType.Start, "mrossi@domain.local", "10.20.30.40"))).Mapping.Username);
-        Assert.Equal(["mario.rossi@other.example"], translator.Calls);
-    }
-
-    [Fact]
-    public void Untranslatable_upn_keeps_its_rewritten_form()
-    {
-        MappingDecider decider = Decider(o => o.NameTranslation = true, new FakeTranslator());
-
-        Assert.Equal("nobody@other.example", Single(decider.Decide(Request(AcctStatusType.Start, "nobody@other.example", "10.20.30.40"))).Mapping.Username);
-    }
-
     [Theory]
     [InlineData(7u)] // Accounting-On
     [InlineData(8u)] // Accounting-Off
@@ -207,17 +185,6 @@ public class MappingDeciderTests
         else
         {
             AssertDropped(Enum.Parse<DropReason>(expected), decision);
-        }
-    }
-
-    private sealed class FakeTranslator : Dictionary<string, string>, INameTranslator
-    {
-        public List<string> Calls { get; } = [];
-
-        public string? TryTranslateToNt4(string upn)
-        {
-            this.Calls.Add(upn);
-            return this.GetValueOrDefault(upn);
         }
     }
 }

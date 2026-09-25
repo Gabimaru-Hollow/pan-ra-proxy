@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 
@@ -65,17 +66,14 @@ internal sealed class UserIdOptionsValidator : IValidateOptions<UserIdOptions>
             failures.Add($"UserId:TimeoutMinutes ({options.TimeoutMinutes}) must be at least twice UserId:InterimIntervalMinutes ({options.InterimIntervalMinutes}).");
         }
 
-        foreach (KeyValuePair<string, string> suffix in options.Domain.UpnSuffixes)
+        if (options.Domain.LookupCacheMinutes < 1)
         {
-            if (string.IsNullOrWhiteSpace(suffix.Value))
-            {
-                failures.Add($"UserId:Domain:UpnSuffixes:{suffix.Key} must name an NT4 domain.");
-            }
+            failures.Add($"UserId:Domain:LookupCacheMinutes must be at least 1 (was {options.Domain.LookupCacheMinutes}).");
         }
 
-        if (options.NameTranslation && string.IsNullOrEmpty(options.Domain.DefaultUpnSuffix))
+        for (int i = 0; i < options.Domain.Rules.Count; i++)
         {
-            failures.Add("UserId:Domain:DefaultUpnSuffix is required when UserId:NameTranslation is on, otherwise a bare username can't be looked up.");
+            ValidateDomainRule(options.Domain.Rules[i], $"UserId:Domain:Rules:{i}", failures);
         }
 
         if (options.BatchSize < 1)
@@ -112,12 +110,36 @@ internal sealed class UserIdOptionsValidator : IValidateOptions<UserIdOptions>
             }
         }
 
-        if (options.NameTranslation && !OperatingSystem.IsWindows())
+        return OptionsChecks.Result(failures);
+    }
+
+    private static void ValidateDomainRule(DomainRuleOptions rule, string key, List<string> failures)
+    {
+        if (string.IsNullOrEmpty(rule.Match))
         {
-            failures.Add("UserId:NameTranslation requires a Windows host.");
+            failures.Add($"{key}:Match is required.");
+            return;
         }
 
-        return OptionsChecks.Result(failures);
+        if (!OptionsChecks.TryCreateRegex(rule.Match, $"{key}:Match", failures, out Regex? match))
+        {
+            return;
+        }
+
+        if (rule.Nt4Domain is null && rule.Replace is null && rule.Lookup is null)
+        {
+            failures.Add($"{key} must set Nt4Domain, Replace or Lookup.");
+        }
+
+        if (rule.Nt4Domain is not null && !match.GetGroupNames().Contains("user"))
+        {
+            failures.Add($"{key}:Nt4Domain needs a 'user' group in Match, e.g. ^(?<user>[^@\\]+)$.");
+        }
+
+        if (rule.Lookup is not null && !OperatingSystem.IsWindows())
+        {
+            failures.Add($"{key}:Lookup asks the directory, which needs a Windows host.");
+        }
     }
 }
 
@@ -178,15 +200,21 @@ internal static class OptionsChecks
         }
     }
 
-    public static void RequireRegex(string pattern, string key, List<string> failures)
+    public static void RequireRegex(string pattern, string key, List<string> failures) =>
+        TryCreateRegex(pattern, key, failures, out _);
+
+    public static bool TryCreateRegex(string pattern, string key, List<string> failures, [NotNullWhen(true)] out Regex? regex)
     {
         try
         {
-            _ = new Regex(pattern, RegexOptions.IgnoreCase, RegexMatchTimeout);
+            regex = new Regex(pattern, RegexOptions.IgnoreCase, RegexMatchTimeout);
+            return true;
         }
         catch (ArgumentException ex)
         {
             failures.Add($"{key} is not a valid regular expression: {ex.Message}");
+            regex = null;
+            return false;
         }
     }
 

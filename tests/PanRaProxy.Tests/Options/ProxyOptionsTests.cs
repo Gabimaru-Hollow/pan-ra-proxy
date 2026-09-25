@@ -63,7 +63,6 @@ public class ProxyOptionsTests
         Assert.Equal(15, userId.TimeoutMinutes);
         Assert.Equal(5, userId.InterimIntervalMinutes);
         Assert.False(userId.LogoutOnStop);
-        Assert.False(userId.NameTranslation);
         Assert.Equal(@"(\$$|^host/)", userId.UsernameFilter);
         Assert.Equal(200, userId.BatchSize);
         Assert.Equal(50, userId.BatchWindowMs);
@@ -128,6 +127,9 @@ public class ProxyOptionsTests
     }
 
     [Theory]
+    [InlineData("UserId:Domain:Rules:0:Match", "(unclosed")]
+    [InlineData("UserId:Domain:LookupCacheMinutes", "0")]
+    [InlineData("UserId:InterimIntervalMinutes", "9")]
     [InlineData("UserId:UsernameFilter", "(unclosed")]
     [InlineData("UserId:UsernameRewrites:0:Match", "[bad")]
     [InlineData("UserId:TimeoutMinutes", "0")]
@@ -139,6 +141,28 @@ public class ProxyOptionsTests
         using ServiceProvider provider = BuildProvider(new() { [key] = value });
 
         AssertInvalid<UserIdOptions>(provider);
+    }
+
+    [Fact]
+    public void Domain_rule_without_an_action_is_rejected()
+    {
+        using ServiceProvider provider = BuildProvider(new() { ["UserId:Domain:Rules:0:Match"] = "^(?<user>.+)$" });
+
+        OptionsValidationException ex = AssertInvalid<UserIdOptions>(provider);
+        Assert.Contains(ex.Failures, f => f.Contains("must set Nt4Domain, Replace or Lookup"));
+    }
+
+    [Fact]
+    public void Nt4Domain_without_a_user_group_is_rejected()
+    {
+        using ServiceProvider provider = BuildProvider(new()
+        {
+            ["UserId:Domain:Rules:0:Match"] = "^.+$",
+            ["UserId:Domain:Rules:0:Nt4Domain"] = "XDOMAIN",
+        });
+
+        OptionsValidationException ex = AssertInvalid<UserIdOptions>(provider);
+        Assert.Contains(ex.Failures, f => f.Contains("needs a 'user' group"));
     }
 
     [Fact]

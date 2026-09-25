@@ -76,7 +76,7 @@ P1-1, P1-2, and P1-3 together with P1-4 are enough for a test alongside the Vect
 | .NET 8 refactor for now; Go rewrite set aside | [ADR 0002](adr/0002-dotnet8-refactor-over-go.md) |
 | Logout-on-Stop: config flag, default `false` | §5.4 |
 | Certificate validation: config flag `DisableCertificateValidation`, default `false` | §5.4 |
-| Name Translation: config flag, default off; Username Rewrite alone produces the Canonical Username (NT4) | §5.4 |
+| Canonical Username from ordered domain rules; the directory lookup is one rule action among others, cached | §5.4, FR-06 |
 
 ## 5. Refactor target: .NET 8
 
@@ -91,7 +91,7 @@ P1-1, P1-2, and P1-3 together with P1-4 are enough for a test alongside the Vect
 | Unbounded `BlockingCollection` | Bounded `System.Threading.Channels` | Fixes P2-4 |
 | 11 `PerformanceCounter`s | `System.Diagnostics.Metrics` | No registration at install time |
 | `EventLog.WriteEntry` | `ILogger` with the EventLog provider | |
-| `TranslateName` P/Invoke | Unchanged, behind the `NameTranslation` flag (default off) | |
+| `TranslateName` P/Invoke | Unchanged, reached through a domain rule's `Lookup`, with a cache in front of it | |
 | WiX v3 installer (net462, NETWORK SERVICE) | WiX v5 MSI: self-contained executable, virtual account `NT SERVICE\PanRaProxy`, restart on failure, Event Log source, firewall rule; secrets and site settings provided after install ([install.md](install.md), [ADR 0003](adr/0003-secrets-as-protected-files-provided-after-install.md)) | |
 
 Carry over unchanged: `RadiusAttribute.cs`, the authentication logic in `AccountingListener.cs`, the response parsing in `Message.cs`, and the Batch deduplication in `MessageQueue.cs` (with P1-4 fixed).
@@ -121,7 +121,7 @@ Each step ships with its tests.
 | FR-03 | Login on `Acct-Status-Type` 1 (Start) and 3 (Interim-Update). Logout on 2 (Stop) only when `LogoutOnStop = true` (default `false`). |
 | FR-04 | Drop Placeholder IPs (`0.0.0.0`, `255.255.255.255`, `255.255.255.254`; the last two are RFC 2865 §5.8 "user may select" and "NAS should select"). IPv4 only: `Framed-IPv6-Address` is ignored. |
 | FR-05 | Timeout on each Login, from configuration (minutes). Default 15. The NAS interim interval is declared as `InterimIntervalMinutes` (default 5) and startup fails if the Timeout is below twice it. |
-| FR-06 | The Canonical Username (NT4) is produced by the `UserId:Domain` rules: a bare username gets `DefaultNt4Domain`, a UPN gets the domain mapped from its suffix (`UpnSuffixes`), an NT4 name is kept, an unmapped form is passed through. Username Rewrite rules (regex) run first as an escape hatch. Name Translation is available behind a flag (default off) and takes precedence, using `DefaultUpnSuffix` for bare usernames. |
+| FR-06 | The Canonical Username (NT4) comes from `UserId:Domain:Rules`, an ordered list where the first matching rule decides. A rule maps the match to a domain (`Nt4Domain`), builds any name from the match's groups (`Replace`), or asks the directory (`Lookup`, Windows only, cached for `LookupCacheMinutes`, with the other two as fallback). A username no rule matches is passed through. `UsernameRewrites` run first as an escape hatch. |
 | FR-07 | Username Filter (regex), applied to the raw `User-Name` before any Username Rewrite. The default drops Machine Accounts (`\$$` and `^host/`). |
 | FR-08 | Batching with a configurable maximum size and hard-timer window (upstream sizes: 200 entries / 50 ms). Within a Batch the last Login or Logout per Mapping wins. |
 | FR-09 | XML API response validation that logs each failed Login or Logout. |
@@ -139,7 +139,7 @@ Each step ships with its tests.
 | NFR-05 | Dedicated API account with an Admin Role limited to XML API > User-ID Agent. |
 | NFR-07 | Event Log entries keep the upstream event IDs (`Logging.cs`) through `ILogger` `EventId`. |
 | NFR-08 | A fatal listener failure (socket bind or close) stops the process. Windows Service recovery is set to restart it. |
-| NFR-06 | Name Translation is revisited only if Mappings with a non-canonical username show up in production. |
+| NFR-06 | No directory lookup is configured while the naming convention holds: in the capture of 2026-09-24 all three username forms use `name.surname`. A `Lookup` rule is added only for accounts where it doesn't. |
 
 ### 5.4 Configuration
 
@@ -158,14 +158,16 @@ Defaults ship in the install folder's `appsettings.json`. Site settings go in `%
     "InterimIntervalMinutes": 5,
     "LogoutOnStop": false,
     "Domain": {
-      "DefaultNt4Domain": "XDOMAIN",
-      "DefaultUpnSuffix": "xdomain.local",
-      "UpnSuffixes": { "xdomain.local": "XDOMAIN", "example.com": "XDOMAIN" }
+      "Rules": [
+        { "Match": "^(?<user>[^@\\\\]+)@(xdomain\\.local|example\\.com)$", "Nt4Domain": "XDOMAIN" },
+        { "Match": "^(?<user>[^@\\\\]+)$", "Nt4Domain": "XDOMAIN" },
+        { "Match": "^(?<user>[^@\\\\]+)@(?<suffix>partner\\.example)$", "Lookup": "${user}@${suffix}", "Replace": "${user}@${suffix}" }
+      ],
+      "LookupCacheMinutes": 480
     },
     "UsernameRewrites": [
       { "Match": "^guest-(.+)$", "Replace": "$1@example.com" }
     ],
-    "NameTranslation": false,
     "UsernameFilter": "(\\$$|^host/)",
     "BatchSize": 200,
     "BatchWindowMs": 50,
