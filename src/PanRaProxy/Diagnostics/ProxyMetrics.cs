@@ -21,7 +21,7 @@ public sealed class ProxyMetrics
     private readonly Counter<long> changesRejected;
     private readonly Counter<long> batches;
 
-    public ProxyMetrics(IMeterFactory meterFactory, MappingBatcher batcher)
+    public ProxyMetrics(IMeterFactory meterFactory, MappingBatcher batcher, AccountingRequestQueue requests)
     {
         Meter meter = meterFactory.Create(MeterName);
 
@@ -33,6 +33,8 @@ public sealed class ProxyMetrics
         this.changesRejected = meter.CreateCounter<long>("panraproxy.firewall.changes.rejected", "{change}", "Logins and Logouts a Firewall rejected");
         this.batches = meter.CreateCounter<long>("panraproxy.firewall.batches", "{batch}", "Batches submitted, by result");
 
+        meter.CreateObservableGauge("panraproxy.requests.queue.depth", () => requests.QueueLength, "{request}", "Accepted requests waiting for the Mapping decision");
+        meter.CreateObservableCounter("panraproxy.requests.queue.dropped", () => requests.DroppedCount, "{request}", "Accepted requests dropped because the queue was full");
         meter.CreateObservableGauge("panraproxy.queue.depth", () => batcher.QueueLength, "{change}", "Logins and Logouts waiting to be batched");
         meter.CreateObservableCounter("panraproxy.queue.dropped", () => batcher.DroppedCount, "{change}", "Logins and Logouts dropped because the queue was full");
     }

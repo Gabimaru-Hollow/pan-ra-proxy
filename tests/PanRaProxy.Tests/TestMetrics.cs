@@ -15,17 +15,20 @@ public sealed class TestMetrics : IDisposable
     private readonly ServiceProvider services;
     private readonly IMeterFactory meterFactory;
 
-    public TestMetrics(MappingBatcher? batcher = null)
+    public TestMetrics(MappingBatcher? batcher = null, AccountingRequestQueue? requests = null)
     {
         this.services = new ServiceCollection().AddMetrics().BuildServiceProvider();
         this.meterFactory = this.services.GetRequiredService<IMeterFactory>();
         this.Batcher = batcher ?? new MappingBatcher(Microsoft.Extensions.Options.Options.Create(new UserIdOptions()), TimeProvider.System);
-        this.Metrics = new ProxyMetrics(this.meterFactory, this.Batcher);
+        this.Requests = requests ?? new AccountingRequestQueue(Microsoft.Extensions.Options.Options.Create(new UserIdOptions()));
+        this.Metrics = new ProxyMetrics(this.meterFactory, this.Batcher, this.Requests);
     }
 
     public ProxyMetrics Metrics { get; }
 
     public MappingBatcher Batcher { get; }
+
+    public AccountingRequestQueue Requests { get; }
 
     public MetricCollector<long> Collect(string instrument) => new(this.meterFactory, ProxyMetrics.MeterName, instrument);
 

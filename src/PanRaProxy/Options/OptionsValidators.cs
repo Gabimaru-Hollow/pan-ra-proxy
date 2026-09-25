@@ -71,11 +71,6 @@ internal sealed class UserIdOptionsValidator : IValidateOptions<UserIdOptions>
             failures.Add($"UserId:Domain:LookupCacheMinutes must be at least 1 (was {options.Domain.LookupCacheMinutes}).");
         }
 
-        for (int i = 0; i < options.Domain.Rules.Count; i++)
-        {
-            ValidateDomainRule(options.Domain.Rules[i], $"UserId:Domain:Rules:{i}", failures);
-        }
-
         if (options.BatchSize < 1)
         {
             failures.Add($"UserId:BatchSize must be at least 1 (was {options.BatchSize}).");
@@ -96,50 +91,8 @@ internal sealed class UserIdOptionsValidator : IValidateOptions<UserIdOptions>
             OptionsChecks.RequireRegex(options.UsernameFilter, "UserId:UsernameFilter", failures);
         }
 
-        for (int i = 0; i < options.UsernameRewrites.Count; i++)
-        {
-            UsernameRewriteOptions rewrite = options.UsernameRewrites[i];
-
-            if (string.IsNullOrEmpty(rewrite.Match))
-            {
-                failures.Add($"UserId:UsernameRewrites:{i}:Match is required.");
-            }
-            else
-            {
-                OptionsChecks.RequireRegex(rewrite.Match, $"UserId:UsernameRewrites:{i}:Match", failures);
-            }
-        }
-
+        // The Username Rewrites and domain rules are validated by the module that runs them (CanonicalUsernameRules).
         return OptionsChecks.Result(failures);
-    }
-
-    private static void ValidateDomainRule(DomainRuleOptions rule, string key, List<string> failures)
-    {
-        if (string.IsNullOrEmpty(rule.Match))
-        {
-            failures.Add($"{key}:Match is required.");
-            return;
-        }
-
-        if (!OptionsChecks.TryCreateRegex(rule.Match, $"{key}:Match", failures, out Regex? match))
-        {
-            return;
-        }
-
-        if (rule.Nt4Domain is null && rule.Replace is null && rule.Lookup is null)
-        {
-            failures.Add($"{key} must set Nt4Domain, Replace or Lookup.");
-        }
-
-        if (rule.Nt4Domain is not null && !match.GetGroupNames().Contains("user"))
-        {
-            failures.Add($"{key}:Nt4Domain needs a 'user' group in Match, e.g. ^(?<user>[^@\\]+)$.");
-        }
-
-        if (rule.Lookup is not null && !OperatingSystem.IsWindows())
-        {
-            failures.Add($"{key}:Lookup asks the directory, which needs a Windows host.");
-        }
     }
 }
 
@@ -203,11 +156,17 @@ internal static class OptionsChecks
     public static void RequireRegex(string pattern, string key, List<string> failures) =>
         TryCreateRegex(pattern, key, failures, out _);
 
+    /// <summary>
+    /// Every regex in the settings is built here, so a pattern is validated exactly as it runs.
+    /// </summary>
+    public static Regex CreateRegex(string pattern) =>
+        new(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexMatchTimeout);
+
     public static bool TryCreateRegex(string pattern, string key, List<string> failures, [NotNullWhen(true)] out Regex? regex)
     {
         try
         {
-            regex = new Regex(pattern, RegexOptions.IgnoreCase, RegexMatchTimeout);
+            regex = CreateRegex(pattern);
             return true;
         }
         catch (ArgumentException ex)

@@ -24,12 +24,16 @@ public class CanonicalUsernameTests
         new() { Match = BareUser, Nt4Domain = "XDOMAIN" },
     ];
 
-    private static MappingDecider Decider(List<DomainRuleOptions>? rules = null, INameTranslator? translator = null, Action<UserIdOptions>? configure = null)
+    private static CanonicalUsernameResolver Resolver(List<DomainRuleOptions>? rules = null, INameTranslator? translator = null, Action<UserIdOptions>? configure = null)
     {
         UserIdOptions options = new() { Domain = new DomainOptions { Rules = rules ?? SiteRules() } };
         configure?.Invoke(options);
-        return new MappingDecider(Microsoft.Extensions.Options.Options.Create(options), translator ?? new NoNameTranslation());
+        return new CanonicalUsernameResolver(CanonicalUsernameRules.Create(options), translator ?? new NoNameTranslation());
     }
+
+    /// <summary>The Mapping decision with the site's rules, for what only a whole request shows (Shared Accounts).</summary>
+    private static MappingDecider Decider() =>
+        new(Microsoft.Extensions.Options.Options.Create(new UserIdOptions()), Resolver());
 
     private static AccountingRequest Request(string user, params string[] ips)
     {
@@ -49,8 +53,7 @@ public class CanonicalUsernameTests
     private static IReadOnlyList<MappingChange> Changes(MappingDecision decision) =>
         Assert.IsType<MappingDecision.Changes>(decision).Items;
 
-    private static string Username(MappingDecider decider, string raw) =>
-        Assert.Single(Changes(decider.Decide(Request(raw, "10.99.10.73")))).Mapping.Username;
+    private static string Username(CanonicalUsernameResolver resolver, string raw) => resolver.Resolve(raw);
 
     [Theory]
     [InlineData("fabio.manfre", @"XDOMAIN\fabio.manfre")]                // bare
@@ -60,7 +63,7 @@ public class CanonicalUsernameTests
     [InlineData("guest@partner.test", "guest@partner.test")]             // unmapped suffix: unchanged
     public void First_matching_rule_decides(string raw, string canonical)
     {
-        Assert.Equal(canonical, Username(Decider(), raw));
+        Assert.Equal(canonical, Username(Resolver(), raw));
     }
 
     [Fact]
@@ -72,8 +75,8 @@ public class CanonicalUsernameTests
             new() { Match = AnyUpn, Nt4Domain = "XDOMAIN" },
         ];
 
-        Assert.Equal(@"PARTNER\anna", Username(Decider(rules), "anna@contractors.example"));
-        Assert.Equal(@"XDOMAIN\bruno", Username(Decider(rules), "bruno@xdomain.local"));
+        Assert.Equal(@"PARTNER\anna", Username(Resolver(rules), "anna@contractors.example"));
+        Assert.Equal(@"XDOMAIN\bruno", Username(Resolver(rules), "bruno@xdomain.local"));
     }
 
     [Fact]
@@ -84,7 +87,7 @@ public class CanonicalUsernameTests
             new() { Match = @"^(?<first>[^.@\\]+)\.(?<last>[^@\\]+)@(?<suffix>.+)$", Replace = @"XDOMAIN\${last}.${first}" },
         ];
 
-        Assert.Equal(@"XDOMAIN\manfre.fabio", Username(Decider(rules), "fabio.manfre@xdomain.local"));
+        Assert.Equal(@"XDOMAIN\manfre.fabio", Username(Resolver(rules), "fabio.manfre@xdomain.local"));
     }
 
     [Fact]
@@ -98,8 +101,8 @@ public class CanonicalUsernameTests
             new() { Match = AnyUpn, Lookup = "${user}@${suffix}", Nt4Domain = "XDOMAIN" },
         ];
 
-        Assert.Equal(@"XDOMAIN\fmanfre", Username(Decider(rules, translator), "fabio.manfre"));
-        Assert.Equal(@"XDOMAIN\fmanfre", Username(Decider(rules, translator), "fabio.manfre@xdomain.local"));
+        Assert.Equal(@"XDOMAIN\fmanfre", Username(Resolver(rules, translator), "fabio.manfre"));
+        Assert.Equal(@"XDOMAIN\fmanfre", Username(Resolver(rules, translator), "fabio.manfre@xdomain.local"));
     }
 
     [Fact]
@@ -110,10 +113,10 @@ public class CanonicalUsernameTests
             new() { Match = BareUser, Lookup = "${user}@xdomain.local", Nt4Domain = "XDOMAIN" },
             new() { Match = AnyUpn, Lookup = "${user}@${suffix}" },
         ];
-        MappingDecider decider = Decider(rules, new FakeTranslator());
+        CanonicalUsernameResolver resolver = Resolver(rules, new FakeTranslator());
 
-        Assert.Equal(@"XDOMAIN\unknown", Username(decider, "unknown"));          // falls back to Nt4Domain
-        Assert.Equal("unknown@partner.test", Username(decider, "unknown@partner.test")); // no fallback: unchanged
+        Assert.Equal(@"XDOMAIN\unknown", Username(resolver, "unknown"));          // falls back to Nt4Domain
+        Assert.Equal("unknown@partner.test", Username(resolver, "unknown@partner.test")); // no fallback: unchanged
     }
 
     [Fact]
@@ -154,18 +157,18 @@ public class CanonicalUsernameTests
     [Fact]
     public void Rewrite_rules_run_before_the_domain_rules()
     {
-        MappingDecider decider = Decider(configure: o => o.UsernameRewrites = [new UsernameRewriteOptions { Match = "^guest-(.+)$", Replace = "$1@example.com" }]);
+        CanonicalUsernameResolver resolver = Resolver(configure: o => o.UsernameRewrites = [new UsernameRewriteOptions { Match = "^guest-(.+)$", Replace = "$1@example.com" }]);
 
-        Assert.Equal(@"XDOMAIN\anna", Username(decider, "guest-anna"));
+        Assert.Equal(@"XDOMAIN\anna", Username(resolver, "guest-anna"));
     }
 
     [Fact]
     public void Without_rules_every_form_is_passed_through()
     {
-        MappingDecider decider = Decider([]);
+        CanonicalUsernameResolver resolver = Resolver([]);
 
-        Assert.Equal("fabio.manfre", Username(decider, "fabio.manfre"));
-        Assert.Equal("fabio.manfre@xdomain.local", Username(decider, "fabio.manfre@xdomain.local"));
+        Assert.Equal("fabio.manfre", Username(resolver, "fabio.manfre"));
+        Assert.Equal("fabio.manfre@xdomain.local", Username(resolver, "fabio.manfre@xdomain.local"));
     }
 
     [Fact]

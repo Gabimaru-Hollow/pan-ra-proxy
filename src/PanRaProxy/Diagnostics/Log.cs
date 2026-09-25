@@ -59,7 +59,7 @@ internal static partial class Log
     [LoggerMessage(3103, LogLevel.Critical, "The RADIUS accounting listener failed and the Proxy will exit")] // new
     public static partial void ListenerFailed(ILogger logger, Exception exception);
 
-    [LoggerMessage(3104, LogLevel.Error, "Processing {Request} failed; the listener continues")] // new
+    [LoggerMessage(3104, LogLevel.Error, "Processing {Request} failed; the request is skipped")] // new
     public static partial void RequestProcessingFailed(ILogger logger, Exception exception, AccountingRequest request);
 
     [LoggerMessage(3105, LogLevel.Error, "Handling a datagram from {Source} failed; the listener continues")] // new

@@ -105,6 +105,26 @@ public class ProxyMetricsTests
     }
 
     [Fact]
+    public void Requests_waiting_for_the_mapping_decision_are_observable()
+    {
+        AccountingRequestQueue requests = new(Microsoft.Extensions.Options.Options.Create(new UserIdOptions { BatchSize = 1, QueueCapacity = 3 }));
+        using TestMetrics metrics = new(requests: requests);
+        using MetricCollector<int> depth = metrics.CollectInt("panraproxy.requests.queue.depth");
+        using MetricCollector<long> dropped = metrics.Collect("panraproxy.requests.queue.dropped");
+
+        for (int i = 1; i <= 5; i++)
+        {
+            requests.Accept(new AccountingRequest(IPAddress.Parse($"10.0.0.{i}"), (byte)i, []));
+        }
+
+        depth.RecordObservableInstruments();
+        dropped.RecordObservableInstruments();
+
+        Assert.Equal(3, depth.LastMeasurement?.Value);
+        Assert.Equal(2, dropped.LastMeasurement?.Value);
+    }
+
+    [Fact]
     public void Mapping_drops_are_counted_by_reason()
     {
         using TestMetrics metrics = new();

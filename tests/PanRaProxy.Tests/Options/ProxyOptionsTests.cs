@@ -41,9 +41,11 @@ public class ProxyOptionsTests
 
         IConfiguration configuration = new ConfigurationBuilder().AddInMemoryCollection(config).Build();
 
+        // The whole Proxy: some settings are validated by the module that uses them (the domain rules).
         ServiceCollection services = new();
-        services.AddSingleton<SecretLookup>(name => env.GetValueOrDefault(name));
-        services.AddProxyOptions(configuration);
+        services.AddLogging();
+        services.AddPanRaProxy(configuration);
+        services.Replace(ServiceDescriptor.Singleton(new SecretLookup(name => env.GetValueOrDefault(name))));
         return services.BuildServiceProvider();
     }
 
@@ -166,6 +168,23 @@ public class ProxyOptionsTests
 
         OptionsValidationException ex = AssertInvalid<UserIdOptions>(provider);
         Assert.Contains(ex.Failures, f => f.Contains("needs a 'user' group"));
+    }
+
+    [Theory]
+    [InlineData("Nt4Domain")]
+    [InlineData("Replace")]
+    [InlineData("Lookup")]
+    public void Domain_rule_with_an_empty_template_is_rejected(string action)
+    {
+        // An empty Replace would send the Firewall a Login with an empty username.
+        using ServiceProvider provider = BuildProvider(new()
+        {
+            ["UserId:Domain:Rules:0:Match"] = @"^(?<user>[^@]+)@domain\.local$",
+            [$"UserId:Domain:Rules:0:{action}"] = "",
+        });
+
+        OptionsValidationException ex = AssertInvalid<UserIdOptions>(provider);
+        Assert.Contains(ex.Failures, f => f.Contains($"UserId:Domain:Rules:0:{action} must not be empty"));
     }
 
     [Fact]

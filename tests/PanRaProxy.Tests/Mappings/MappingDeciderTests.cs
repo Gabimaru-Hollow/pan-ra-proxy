@@ -16,7 +16,9 @@ public class MappingDeciderTests
     {
         UserIdOptions options = new() { UsernameRewrites = [UpnToNt4] };
         configure?.Invoke(options);
-        return new MappingDecider(Microsoft.Extensions.Options.Options.Create(options), translator ?? new NoNameTranslation());
+        return new MappingDecider(
+            Microsoft.Extensions.Options.Options.Create(options),
+            new CanonicalUsernameResolver(CanonicalUsernameRules.Create(options), translator ?? new NoNameTranslation()));
     }
 
     private static AccountingRequest Request(uint? status, string? user, params string[] framedIps)

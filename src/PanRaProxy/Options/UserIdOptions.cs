@@ -50,5 +50,10 @@ public sealed class UsernameRewriteOptions
 {
     public string Match { get; set; } = "";
 
+    /// <summary>
+    /// Replaces only the part of the username that <see cref="Match"/> found, like <c>Regex.Replace</c>:
+    /// <c>@domain\.local$</c> with an empty Replace strips the suffix. A domain rule's
+    /// <see cref="DomainRuleOptions.Replace"/> builds the whole name instead.
+    /// </summary>
     public string Replace { get; set; } = "";
 }

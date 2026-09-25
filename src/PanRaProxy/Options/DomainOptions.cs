@@ -42,7 +42,8 @@ public sealed class DomainRuleOptions
     public string? Nt4Domain { get; set; }
 
     /// <summary>
-    /// The Canonical Username to build from the match, e.g. <c>XDOMAIN\${user}</c>.
+    /// The Canonical Username to build from the match, e.g. <c>XDOMAIN\${user}</c>. The template is the
+    /// whole result, unlike a Username Rewrite's <see cref="UsernameRewriteOptions.Replace"/>. Must not be empty.
     /// </summary>
     public string? Replace { get; set; }
 

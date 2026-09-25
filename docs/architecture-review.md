@@ -7,12 +7,12 @@ Reviewed at `ed83069` on `refactor/net8-fork`, with 150 tests green. The review 
 | # | Candidate | Strength |
 |---|---|---|
 | 1 | [One composition root](#1-one-composition-root) | Done |
-| 2 | [Canonical Username as its own module](#2-canonical-username-as-its-own-module) | Strong |
-| 3 | [A domain rule that validates itself](#3-a-domain-rule-that-validates-itself) | Strong |
+| 2 | [Canonical Username as its own module](#2-canonical-username-as-its-own-module) | Done |
+| 3 | [A domain rule that validates itself](#3-a-domain-rule-that-validates-itself) | Done |
 | 4 | [Break the Diagnostics hub](#4-break-the-diagnostics-hub) | Worth exploring |
 | 5 | [Make startup a module, not a script](#5-make-startup-a-module-not-a-script) | Worth exploring |
 | 6 | [Split failover from submission](#6-split-failover-from-submission) | Speculative |
-| 7–11 | [Second pass: fragilities](#second-pass-fragilities) | Two fixed, three open |
+| 7–11 | [Second pass: fragilities](#second-pass-fragilities) | 7–10 fixed; 11 partly |
 
 Suggested order: 1 first, because it is cheap and protects the evidence the rest rests on; then 2 and 3 together, because they are the same change seen from two sides. The [validation agenda](#validation-agenda) at the end says what each candidate has to answer before it is worth doing.
 
@@ -61,6 +61,10 @@ The test surface shows it. `CanonicalUsernameTests` has to build an `AccountingR
 
 **What improves.** Tests ask the real question. Rule changes stay in one module. The decision module shrinks to the concept it is named after. The lookup (Windows-only, cached) sits behind an internal seam instead of being visible in the decision code.
 
+**Outcome.** Done, together with 3 and [finding 9](#9-a-directory-lookup-can-stall-the-listener). `Mappings/CanonicalUsername.cs` holds `CanonicalUsernameResolver` (a raw User-Name in, a Canonical Username out), and `MappingDecider` takes it as one dependency. `CanonicalUsernameTests` asks the resolver directly. The deciding question was answered on 2026-09-25: the rules will keep moving, because bare names, UPNs of several suffixes and NT4 names all reach the Proxy, and `Lookup` is needed in production.
+
+The interface is plain `string → string`. A result that says which rule matched, so the Proxy could count the Mappings that aren't in NT4 form, is deferred. What would bring it back: the replay leaves 13 of 40 Mappings in UPN form (the suffixes no rule covers), so if production shows the same, that number is worth watching.
+
 ---
 
 ## 3. A domain rule that validates itself
@@ -80,6 +84,10 @@ A fourth action would have to be added in both places, and nothing fails if only
 **Solution.** A rule set that is valid by construction: `TryCreate(options)` returns either the compiled rules or the reasons it can't. The validator reports those reasons; the decision module (or candidate 2's module) applies the result. `ValidateDomainRule` disappears.
 
 **What improves.** One module defines what a rule is, what it means and how it runs. Invalid rules stop being representable past startup. The startup message wording (event 3106) stays where the checks are.
+
+**Outcome.** Done. `CanonicalUsernameRules.TryCreate` is the only definition of a valid rule. A `DomainRule` validates itself and applies itself (`DomainRule.Apply`). The Mappings module registers `CanonicalUsernameRulesValidator`, so the rule failures still reach event 3106 with the other UserId settings, and `ValidateDomainRule` is gone. Every regex in the settings now comes from `OptionsChecks.CreateRegex`, so a pattern is validated with the same options it runs with.
+
+The regexes are still compiled twice at startup, once by the validator and once for the singleton. That is accepted: the cost is negligible, the configuration is never reloaded without a restart, and what mattered was having one statement of the rules.
 
 ---
 
@@ -133,19 +141,28 @@ A second, deeper pass over the whole of `src/PanRaProxy`, looking for fragile ch
 
 ### 9. A directory lookup can stall the listener
 
-**Open.** `IAccountingRequestSink` says "Must not block": the listener calls it inline. With a `Lookup` rule, a cache miss calls `TranslateNameW` synchronously (`Mappings/NameTranslation.cs`) on that path. With a slow or unreachable domain controller, the receive loop waits: the current packet is already acknowledged, but the next datagrams queue in the socket buffer. The likely moment is the burst of Interim-Updates after a domain controller outage.
+**Fixed.** `IAccountingRequestSink` says "Must not block": the listener calls it inline. With a `Lookup` rule, a cache miss calls `TranslateNameW` synchronously (`Mappings/NameTranslation.cs`) on that path. With a slow or unreachable domain controller, the receive loop waits: the current packet is already acknowledged, but the next datagrams queue in the socket buffer. The likely moment is the burst of Interim-Updates after a domain controller outage.
 
 `Lookup` is needed in production (2026-09-25). Clients authenticate with bare names, UPNs of several suffixes, and NT4 names. NPS resolves them itself because its host is domain-joined, but accounting reaches the Proxy from the NAS side, and User-ID needs one Canonical Username (the sAMAccountName form). So this finding has to be fixed. The direction is to resolve the Canonical Username off the listener's path, which is also where [candidate 2](#2-canonical-username-as-its-own-module) would put it.
 
+Three placements were weighed:
+- a lookup inline with a time limit, which would still pause reception on every cache miss;
+- resolving inside the Batch, which would stretch the ADR 0001 timer and move deduplication into the batcher;
+- a decision worker, which was chosen.
+
+The listener now only queues the accepted request in `AccountingRequestQueue`. `MappingDecisionWorker` runs the whole Mapping decision, lookup included, on its own and feeds the Batch, which is unchanged. The request queue follows the Batch queue's rules (NFR-03): capacity `UserId:QueueCapacity`, and when full the oldest request is dropped and counted. It shows up as `panraproxy.requests.queue.depth` and `panraproxy.requests.queue.dropped`. A slow domain controller now delays Logins, never reception or acknowledgements. `MappingDecisionWorkerTests` pins both properties: the listener doesn't wait, and a failing decision doesn't stop the worker.
+
 ### 10. `Replace` means two different things
 
-**Open.** A Username Rewrite applies `Regex.Replace`, which substitutes the matched part. A domain rule's `Replace` applies `Match.Result`, where the template is the whole result. With `Match: "@domain\.local$"` and `Replace: ""`, the rewrite turns `mrossi@domain.local` into `mrossi`, but the rule turns it into an empty string. The validator accepts it (it checks only for null), so the Firewall would receive a Login with an empty username. Username Rewrites stay, confirmed needed on 2026-09-25, so the fix is to reject an empty result and to make the difference visible in the names or the documentation. It belongs with candidates 2 and 3.
+**Fixed in part.** A Username Rewrite applies `Regex.Replace`, which substitutes the matched part. A domain rule's `Replace` applies `Match.Result`, where the template is the whole result. With `Match: "@domain\.local$"` and `Replace: ""`, the rewrite turns `mrossi@domain.local` into `mrossi`, but the rule turns it into an empty string. The validator accepts it (it checks only for null), so the Firewall would receive a Login with an empty username. Username Rewrites stay, confirmed needed on 2026-09-25, so the fix is to reject an empty result and to make the difference visible in the names or the documentation. It belongs with candidates 2 and 3.
+
+Now an empty `Nt4Domain`, `Replace` or `Lookup` on a domain rule is rejected at startup (3106). The two meanings of `Replace` remain, documented on the options. Renaming one of them would break existing site settings for a small gain.
 
 ### 11. Smaller points
 
 **Open, low priority.**
-- **DRY.** The validator compiles regexes with `IgnoreCase` (`OptionsValidators.cs`), while the decision module uses `IgnoreCase | CultureInvariant` (`MappingDecider.cs`). This adds to candidate 3.
-- **SRP / discoverability.** `BatchSender` and `MappingDecisionSink` live in files named `…Registration.cs`. Anyone looking for how Batches are sent won't open them there.
+- **DRY.** *Fixed with candidate 3.* The validator compiled regexes with `IgnoreCase`, while the decision module used `IgnoreCase | CultureInvariant`.
+- **SRP / discoverability.** *Half fixed.* `MappingDecisionSink` became `MappingDecisionWorker`, in a file of its own. `BatchSender` still lives in `FirewallRegistration.cs`.
 - **DIP.** `Func<string, IPAddress[]>` is a DI key. A raw `Func` is an ambiguous key: any other `Func` of the same shape would collide. The other adapters are named delegates (`SecretLookup`, `ProcessExit`).
 - **KISS / YAGNI.** The rolling file logger is 265 lines of our own code, and it held finding 7. Keeping it rather than taking a dependency is a choice worth an ADR, either way.
 
