@@ -50,4 +50,7 @@ public enum DropReason
 
     /// <summary>An Accounting-Stop while Logout-on-Stop is off.</summary>
     LogoutOnStopDisabled,
+
+    /// <summary>The Canonical Username is empty, or holds characters a uid-message can't carry (control characters).</summary>
+    UnusableUsername,
 }

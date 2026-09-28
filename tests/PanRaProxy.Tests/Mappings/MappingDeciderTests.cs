@@ -49,6 +49,23 @@ public class MappingDeciderTests
         Assert.Equal(new MappingDecision.Dropped(reason), decision);
 
     [Theory]
+    [InlineData("mrossi\u0001")]      // a control character: XML can't carry it
+    [InlineData("m\u0000rossi")]
+    public void A_username_the_uid_message_cannot_carry_is_dropped(string user)
+    {
+        // Sent, it would make the whole Batch fail to serialize, every Interim-Update, for everyone in it.
+        AssertDropped(DropReason.UnusableUsername, Decider().Decide(Request(AcctStatusType.Start, user, "10.20.30.40")));
+    }
+
+    [Fact]
+    public void A_username_rewritten_to_nothing_is_dropped()
+    {
+        MappingDecider decider = Decider(o => o.UsernameRewrites = [new UsernameRewriteOptions { Match = "^guest-.*$", Replace = "" }]);
+
+        AssertDropped(DropReason.UnusableUsername, decider.Decide(Request(AcctStatusType.Start, "guest-anna", "10.20.30.40")));
+    }
+
+    [Theory]
     [InlineData(AcctStatusType.Start)]
     [InlineData(AcctStatusType.InterimUpdate)]
     public void Start_and_interim_update_become_a_login_with_the_timeout(uint status)

@@ -93,6 +93,26 @@ public sealed class ProxyStartupTests : IDisposable
     }
 
     [Fact]
+    public void Site_settings_that_are_not_valid_json_exit_1_with_the_reason()
+    {
+        // The most likely mistake after editing the site settings by hand: a missing comma.
+        string site = Path.Combine(this.directory, "appsettings.json");
+        File.WriteAllText(site, "{ \"Radius\": { \"Port\": 18131 } \"UserId\": {} }");
+
+        int code = ProxyStartup.Run(this.Args(["--check-config", .. ValidSettings]), this.Console() with { SiteSettingsFile = site });
+
+        Assert.Equal(1, code);
+        Assert.Contains(site, this.error.ToString());
+    }
+
+    [Fact]
+    public void A_value_of_the_wrong_type_is_reported_as_invalid_configuration()
+    {
+        Assert.Equal(1, ProxyStartup.Run(this.Args(["--check-config", "--Radius:Port=abc", .. ValidSettings]), this.Console()));
+        Assert.Contains("The configuration is invalid", this.output.ToString());
+    }
+
+    [Fact]
     public void Check_config_writes_no_log_file()
     {
         ProxyStartup.Run(this.Args(["--check-config", .. ValidSettings]), this.Console());

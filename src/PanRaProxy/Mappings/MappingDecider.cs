@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.RegularExpressions;
+using System.Xml;
 using Microsoft.Extensions.Options;
 using PanRaProxy.Options;
 using PanRaProxy.Radius;
@@ -69,10 +70,36 @@ public sealed class MappingDecider
 
         string username = this.canonicalUsername.Resolve(rawUsername);
 
+        if (!IsUsable(username))
+        {
+            return new MappingDecision.Dropped(DropReason.UnusableUsername);
+        }
+
         MappingChange[] changes = statusType == AcctStatusType.Stop
             ? addresses.Select(a => (MappingChange)new MappingChange.Logout(new Mapping(username, a))).ToArray()
             : addresses.Select(a => (MappingChange)new MappingChange.Login(new Mapping(username, a), this.timeout)).ToArray();
 
         return new MappingDecision.Changes(changes);
+    }
+
+    /// <summary>
+    /// A uid-message is XML: one username it can't carry would fail the whole Batch, every Interim-Update.
+    /// </summary>
+    private static bool IsUsable(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return false;
+        }
+
+        try
+        {
+            XmlConvert.VerifyXmlChars(username);
+            return true;
+        }
+        catch (XmlException)
+        {
+            return false;
+        }
     }
 }

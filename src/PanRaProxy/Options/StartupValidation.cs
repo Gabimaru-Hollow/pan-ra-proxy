@@ -55,5 +55,10 @@ public static class StartupValidation
         {
             failures.AddRange(ex.Failures);
         }
+        catch (Exception ex)
+        {
+            // Binding fails before validation runs, e.g. Radius:Port=abc: "Failed to convert configuration value ...".
+            failures.Add(ex.Message);
+        }
     }
 }

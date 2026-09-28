@@ -60,6 +60,28 @@ public static class DiagnosticsRegistration
         }
     }
 
+    /// <summary>
+    /// Reports a configuration that can't even be read (event 3106) straight to the Event Log, because no
+    /// logger exists yet. Writes only when the Proxy's own source exists, so it never registers one.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    public static void WriteStartupFailure(string message)
+    {
+        if (EventLogProblem() is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            EventLog.WriteEntry(EventLogSource, message, EventLogEntryType.Error, 3106);
+        }
+        catch (Exception)
+        {
+            // The console and the exit code still report it.
+        }
+    }
+
     [SupportedOSPlatform("windows")]
     private static void ConfigureEventLog(EventLogSettings settings)
     {

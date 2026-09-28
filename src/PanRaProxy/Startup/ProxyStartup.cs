@@ -14,14 +14,16 @@ internal sealed record StartupEnvironment(
     string SiteSettingsFile,
     bool IsWindowsService,
     Func<string?> EventLogProblem,
-    Action<IServiceCollection>? ReplaceServices = null)
+    Action<IServiceCollection>? ReplaceServices = null,
+    Action<string>? WriteEventLog = null)
 {
     public static StartupEnvironment Machine() => new(
         Console.Out,
         Console.Error,
         ProxyPaths.SiteSettingsFile,
         WindowsServiceHelpers.IsWindowsService(),
-        OperatingSystem.IsWindows() ? DiagnosticsRegistration.EventLogProblem : () => "there is no Event Log off Windows.");
+        OperatingSystem.IsWindows() ? DiagnosticsRegistration.EventLogProblem : () => "there is no Event Log off Windows.",
+        WriteEventLog: OperatingSystem.IsWindows() ? DiagnosticsRegistration.WriteStartupFailure : null);
 }
 
 /// <summary>
@@ -55,8 +57,27 @@ public static class ProxyStartup
                 return 0;
         }
 
+        IHost built;
+        try
+        {
+            built = BuildHost(command, environment);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or FormatException)
+        {
+            // Before any logger exists: a settings file that isn't valid JSON, or a malformed argument.
+            string reason = $"The configuration can't be read: {ex.Message} {ex.InnerException?.Message}".TrimEnd();
+            environment.Error.WriteLine(reason);
+
+            if (command.Mode == StartupMode.Run)
+            {
+                environment.WriteEventLog?.Invoke(reason); // a service has no console to show it on
+            }
+
+            return 1;
+        }
+
         bool valid;
-        using (IHost host = BuildHost(command, environment))
+        using (IHost host = built)
         {
             // Every configuration problem at once, in the log, before any module starts (event 3106).
             valid = StartupValidation.Validate(host.Services);
