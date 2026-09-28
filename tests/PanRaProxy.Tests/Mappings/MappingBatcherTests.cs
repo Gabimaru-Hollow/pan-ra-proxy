@@ -15,11 +15,16 @@ public class MappingBatcherTests
     private MappingBatcher Batcher(int batchSize = 200, int windowMs = 50, int capacity = 10_000) =>
         new(Microsoft.Extensions.Options.Options.Create(new UserIdOptions { BatchSize = batchSize, BatchWindowMs = windowMs, QueueCapacity = capacity }), this.time);
 
-    private static Mapping M(string user, string ip = "10.20.30.40") => new(user, IPAddress.Parse(ip));
+    /// <summary>
+    /// Each user on an IP of their own (a on .1, b on .2, ...) unless a test puts them on the same one.
+    /// </summary>
+    private static Mapping M(string user, string? ip = null) => new(user, IPAddress.Parse(ip ?? $"10.20.30.{user[0] - 'a' + 1}"));
 
-    private static MappingChange.Login Login(string user, string ip = "10.20.30.40") => new(M(user, ip), Timeout);
+    private static MappingChange.Login Login(string user, string? ip = null) => new(M(user, ip), Timeout);
 
-    private static MappingChange.Logout Logout(string user, string ip = "10.20.30.40") => new(M(user, ip));
+    private static MappingChange.Logout Logout(string user, string? ip = null) => new(M(user, ip));
+
+    private const string SharedIp = "10.20.30.99";
 
     /// <summary>
     /// Lets continuations scheduled by the fake clock run, and proves the task is still pending.
@@ -111,6 +116,59 @@ public class MappingBatcherTests
 
         Assert.Equal([Logout("a"), Login("b"), Login("c"), Login("a", "10.20.30.41")], batch.Changes);
         Assert.Equal([Logout("a")], batch.Logouts);
+    }
+
+    [Fact]
+    public async Task The_latest_login_for_an_ip_wins_whatever_came_before()
+    {
+        // An IP belongs to at most one Mapping: the Batch must not depend on the order of its entries.
+        MappingBatcher batcher = this.Batcher(windowMs: 0);
+        batcher.Enqueue(Login("a", SharedIp));
+        batcher.Enqueue(Login("b", SharedIp));
+        batcher.Enqueue(Login("a", SharedIp)); // a is back: the IP is a's, not b's
+
+        Batch batch = await batcher.ReadBatchAsync(CancellationToken.None).WaitAsync(Settle);
+
+        Assert.Equal([Login("a", SharedIp)], batch.Changes);
+    }
+
+    [Fact]
+    public async Task A_login_replaces_an_earlier_logout_for_the_same_ip()
+    {
+        MappingBatcher batcher = this.Batcher(windowMs: 0);
+        batcher.Enqueue(Logout("a", SharedIp));
+        batcher.Enqueue(Login("b", SharedIp));
+
+        Batch batch = await batcher.ReadBatchAsync(CancellationToken.None).WaitAsync(Settle);
+
+        Assert.Equal([Login("b", SharedIp)], batch.Changes);
+    }
+
+    [Fact]
+    public async Task A_logout_of_a_user_who_no_longer_holds_the_ip_is_dropped()
+    {
+        // uid-messages list every Login before every Logout: sent, this Logout would follow b's Login.
+        MappingBatcher batcher = this.Batcher(windowMs: 0);
+        batcher.Enqueue(Login("b", SharedIp));
+        batcher.Enqueue(Logout("a", SharedIp));
+
+        Batch batch = await batcher.ReadBatchAsync(CancellationToken.None).WaitAsync(Settle);
+
+        Assert.Equal([Login("b", SharedIp)], batch.Changes);
+    }
+
+    [Fact]
+    public async Task A_shared_account_keeps_one_login_per_ip()
+    {
+        MappingBatcher batcher = this.Batcher(windowMs: 0);
+        batcher.Enqueue(Login("s", "10.20.30.71"));
+        batcher.Enqueue(Login("s", "10.20.30.72"));
+        batcher.Enqueue(Logout("s", "10.20.30.71")); // one device leaves; the other stays
+        batcher.Enqueue(Login("s", "10.20.30.73"));
+
+        Batch batch = await batcher.ReadBatchAsync(CancellationToken.None).WaitAsync(Settle);
+
+        Assert.Equal([Login("s", "10.20.30.72"), Logout("s", "10.20.30.71"), Login("s", "10.20.30.73")], batch.Changes);
     }
 
     [Fact]

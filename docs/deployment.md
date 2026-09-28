@@ -73,3 +73,14 @@ The interval is declared to the Proxy as `UserId.InterimIntervalMinutes` (defaul
 
 - Create a dedicated API account whose Admin Role is limited to XML API > User-ID Agent.
 - List the active firewall and its HA peer as Firewalls in the Proxy's configuration, in failover order.
+
+## Open questions for the firewall team
+
+1. **How does the passive HA peer answer a User-ID call?** If it answers with an API error rather than
+   being unreachable, the Proxy won't fail over to the active one: its failover rule treats an API error as
+   final (see `SubmissionResult.ApiError`). The answer decides architecture review candidate 6.
+2. **Does a `<logout>` entry with `name=A`, `ip=X` remove a Mapping `X → B`?** In other words: does PAN-OS
+   match the name, or only the IP? Inside a Batch the Proxy never sends such a Logout. Across two Batches it
+   can: a late Stop from A after B took the IP. If PAN-OS matches only the IP, turning Logout-on-Stop on
+   would let that Stop remove B's Mapping until B's next Interim-Update. With Logout-on-Stop off (the
+   default) no Logout is ever sent.

@@ -41,7 +41,7 @@ How long the firewall keeps a Mapping without receiving another Login for it. An
 _Avoid_: TTL, expiry, lifetime
 
 **Batch**:
-One call to the Firewall carrying every Login and Logout gathered within a fixed window that starts at the first accounting packet. Within a Batch, the last Login or Logout for each Mapping wins and the earlier ones are discarded.
+One call to the Firewall carrying every Login and Logout gathered within a fixed window that starts at the first accounting packet. Within a Batch, the latest change for each IP wins: a Login replaces every earlier change for its IP, and a Logout is dropped when another user's Login already holds that IP. So the result doesn't depend on the order of the entries.
 _Avoid_: uid-message, message, payload
 
 **Firewall**:

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Threading.Channels;
 using Microsoft.Extensions.Options;
 using PanRaProxy.Options;
@@ -5,7 +6,9 @@ using PanRaProxy.Options;
 namespace PanRaProxy.Mappings;
 
 /// <summary>
-/// One call's worth of Logins and Logouts, at most one per Mapping.
+/// One call's worth of Logins and Logouts: at most one Login per IP, and no Logout for an IP that a Login in
+/// the same Batch gives to someone else. What the Firewall ends up with doesn't depend on the order of the
+/// entries, which the uid-message doesn't keep (every Login is listed before every Logout).
 /// </summary>
 public sealed record Batch(IReadOnlyList<MappingChange> Changes)
 {
@@ -17,8 +20,8 @@ public sealed record Batch(IReadOnlyList<MappingChange> Changes)
 /// <summary>
 /// Groups Logins and Logouts into Batches (ADR 0001). The queue is bounded and drops the oldest change
 /// when full (NFR-03). A Batch closes when it holds BatchSize Mappings or when BatchWindowMs has passed
-/// since its first change was queued: a hard timer that later changes don't restart. Within a Batch the last
-/// change per Mapping wins.
+/// since its first change was queued: a hard timer that later changes don't restart. Within a Batch the latest
+/// change for each IP wins, because an IP belongs to at most one Mapping.
 /// </summary>
 public sealed class MappingBatcher
 {
@@ -60,7 +63,6 @@ public sealed class MappingBatcher
     public async Task<Batch> ReadBatchAsync(CancellationToken cancellationToken)
     {
         ChannelReader<Queued> reader = this.queue.Reader;
-        Dictionary<Mapping, int> positions = [];
         List<MappingChange> changes = [];
 
         Queued first = await reader.ReadAsync(cancellationToken);
@@ -99,15 +101,22 @@ public sealed class MappingBatcher
 
         return new Batch(changes);
 
+        // A Batch holds at most BatchSize changes, so a linear search is cheaper than keeping an index in step.
         void Add(MappingChange change)
         {
-            if (positions.TryGetValue(change.Mapping, out int index))
+            IPAddress ip = change.Mapping.IpAddress;
+
+            if (change is MappingChange.Login)
             {
-                changes[index] = change;
+                // A Login gives the IP to its user on the Firewall: every earlier change for that IP is moot.
+                changes.RemoveAll(c => c.Mapping.IpAddress.Equals(ip));
+                changes.Add(change);
             }
-            else
+            else if (!changes.Any(c => c is MappingChange.Login && c.Mapping.IpAddress.Equals(ip) && c.Mapping != change.Mapping))
             {
-                positions[change.Mapping] = changes.Count;
+                // A Logout stands only while no one else's Login claims the IP: sent after that Login, it
+                // could take the IP from its new holder.
+                changes.RemoveAll(c => c.Mapping == change.Mapping);
                 changes.Add(change);
             }
         }
