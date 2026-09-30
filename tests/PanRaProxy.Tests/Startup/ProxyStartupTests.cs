@@ -18,23 +18,42 @@ public sealed class ProxyStartupTests : IDisposable
     private static readonly string[] ValidSettings =
     [
         "--Radius:Clients:0:Host=10.0.0.10",
-        "--Radius:Clients:0:SecretName=RADIUS_SECRET",
         "--Firewalls:Endpoints:0=https://fw-a.test/api/",
     ];
 
     private readonly string directory = Directory.CreateTempSubdirectory("panraproxy-startup-").FullName;
     private readonly StringWriter output = new();
     private readonly StringWriter error = new();
+    private readonly List<string> protectedDirectories = [];
+    private int restarts;
 
     public void Dispose() => Directory.Delete(this.directory, recursive: true);
 
-    private StartupEnvironment Console(string? eventLogProblem = null) => new(
+    private string SecretsDirectory => Path.Combine(this.directory, "secrets");
+
+    /// <summary>
+    /// A console on a machine where every effect is recorded instead of applied: no ACL change, no service restart.
+    /// </summary>
+    private StartupEnvironment Console(string? eventLogProblem = null, string? typedSecret = "typed-secret") => new(
         this.output,
         this.error,
         SiteSettingsFile: Path.Combine(this.directory, "no-site-settings.json"),
         IsWindowsService: false,
         EventLogProblem: () => eventLogProblem,
-        ReplaceServices: services => services.Replace(ServiceDescriptor.Singleton(new SecretLookup(name => name is "RADIUS_SECRET" or "PAN_API_KEY" ? "lab" : null))));
+        ReplaceServices: services => services.Replace(ServiceDescriptor.Singleton(new SecretLookup(name => SecretNames.All.Contains(name) ? "lab" : null))),
+        SecretsDirectory: this.SecretsDirectory,
+        ReadSecretValue: _ => typedSecret,
+        ProtectSecretsDirectory: path =>
+        {
+            Directory.CreateDirectory(path);
+            this.protectedDirectories.Add(path);
+            return null;
+        },
+        RestartService: () =>
+        {
+            this.restarts++;
+            return "The PanRaProxy service was restarted.";
+        });
 
     private string[] Args(params string[] args) =>
         [.. args, $"--Logging:File:Directory={Path.Combine(this.directory, "logs")}"];
@@ -76,6 +95,43 @@ public sealed class ProxyStartupTests : IDisposable
 
         Assert.Null(command.Error);
         Assert.Equal(args, command.SettingsArgs);
+    }
+
+    [Theory]
+    [InlineData(SecretNames.Radius)]
+    [InlineData(SecretNames.FirewallApiKey)]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")] // DPAPI
+    public void Set_secret_encrypts_the_value_protects_the_folder_and_restarts_the_service(string name)
+    {
+        Assert.Equal(0, ProxyStartup.Run(["--set-secret", name], this.Console(typedSecret: "s3cr3t-value")));
+
+        string onDisk = File.ReadAllText(Path.Combine(this.SecretsDirectory, name));
+        Assert.StartsWith("dpapi:v1:", onDisk);
+        Assert.Equal("s3cr3t-value", SecretStore.Read(name, this.SecretsDirectory));
+        Assert.Equal([this.SecretsDirectory], this.protectedDirectories);
+        Assert.Equal(1, this.restarts);
+        Assert.DoesNotContain("s3cr3t-value", this.output.ToString() + this.error.ToString());
+    }
+
+    [Theory]
+    [InlineData("--set-secret")]
+    [InlineData("--set-secret", "RADIUS_SECRET_NPS1")]
+    [InlineData("--set-secret", "--debug")]
+    public void Set_secret_without_a_known_name_exits_2(params string[] args)
+    {
+        Assert.Equal(2, ProxyStartup.Run(args, this.Console()));
+        Assert.Contains("radius", this.error.ToString());
+        Assert.False(Directory.Exists(this.SecretsDirectory));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    public void Set_secret_with_no_value_changes_nothing(string? typed)
+    {
+        Assert.Equal(1, ProxyStartup.Run(["--set-secret", SecretNames.Radius], this.Console(typedSecret: typed)));
+        Assert.False(File.Exists(Path.Combine(this.SecretsDirectory, SecretNames.Radius)));
+        Assert.Equal(0, this.restarts);
     }
 
     [Fact]

@@ -1,5 +1,7 @@
 # Secrets are protected files provided after installation
 
+**Status:** Superseded by [ADR 0007](0007-two-fixed-secrets-set-by-the-binary.md) (2026-09-30): the binary sets two fixed secrets, encrypted with DPAPI, in this same protected folder.
+
 The RADIUS shared secrets and the Firewall API key never pass through the MSI, the site settings file or a command line. After installation, `Set-PanRaProxySecret.ps1` writes each secret as a file in `%ProgramData%\PanRaProxy\secrets`, a folder whose ACL is protected (not inherited from ProgramData) and grants read only to `NT SERVICE\PanRaProxy`, plus full control to SYSTEM and Administrators. The Proxy reads the file named in `SecretName` / `ApiKeySecretName`, falling back to an environment variable of the same name for development and tests.
 
 ## Considered Options

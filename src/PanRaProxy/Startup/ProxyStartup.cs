@@ -15,7 +15,11 @@ internal sealed record StartupEnvironment(
     bool IsWindowsService,
     Func<string?> EventLogProblem,
     Action<IServiceCollection>? ReplaceServices = null,
-    Action<string>? WriteEventLog = null)
+    Action<string>? WriteEventLog = null,
+    string? SecretsDirectory = null,
+    Func<string, string?>? ReadSecretValue = null,
+    Func<string, string?>? ProtectSecretsDirectory = null,
+    Func<string?>? RestartService = null)
 {
     public static StartupEnvironment Machine() => new(
         Console.Out,
@@ -23,7 +27,19 @@ internal sealed record StartupEnvironment(
         ProxyPaths.SiteSettingsFile,
         WindowsServiceHelpers.IsWindowsService(),
         OperatingSystem.IsWindows() ? DiagnosticsRegistration.EventLogProblem : () => "there is no Event Log off Windows.",
-        WriteEventLog: OperatingSystem.IsWindows() ? DiagnosticsRegistration.WriteStartupFailure : null);
+        WriteEventLog: OperatingSystem.IsWindows() ? DiagnosticsRegistration.WriteStartupFailure : null,
+        SecretsDirectory: ProxyPaths.SecretsDirectory,
+        ReadSecretValue: SecretCommand.ReadFromConsole,
+        ProtectSecretsDirectory: OperatingSystem.IsWindows() ? SecretCommand.ProtectDirectory : _ => null,
+        RestartService: OperatingSystem.IsWindows() ? SecretCommand.RestartServiceIfRunning : () => null);
+
+    public string SecretsDirectory { get; init; } = SecretsDirectory ?? ProxyPaths.SecretsDirectory;
+
+    public Func<string, string?> ReadSecretValue { get; init; } = ReadSecretValue ?? (_ => null);
+
+    public Func<string, string?> ProtectSecretsDirectory { get; init; } = ProtectSecretsDirectory ?? (_ => null);
+
+    public Func<string?> RestartService { get; init; } = RestartService ?? (() => null);
 }
 
 /// <summary>
@@ -55,6 +71,9 @@ public static class ProxyStartup
             case StartupMode.Version:
                 environment.Output.WriteLine(Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown");
                 return 0;
+
+            case StartupMode.SetSecret:
+                return SecretCommand.Run(command.SecretName!, environment);
         }
 
         IHost built;
@@ -150,9 +169,16 @@ public static class ProxyStartup
             }
         }
 
-        if (SecretStore.IsUnreadable(ProxyPaths.SecretsDirectory))
+        if (SecretStore.IsUnreadable(environment.SecretsDirectory))
         {
-            notes.Add(logger => Log.SecretsFolderUnreadable(logger, ProxyPaths.SecretsDirectory));
+            notes.Add(logger => Log.SecretsFolderUnreadable(logger, environment.SecretsDirectory));
+        }
+        else
+        {
+            foreach (string name in SecretNames.All.Where(name => SecretStore.IsStoredInPlaintext(name, environment.SecretsDirectory)))
+            {
+                notes.Add(logger => Log.SecretInPlaintext(logger, name));
+            }
         }
 
         builder.Services.AddWindowsService(options => options.ServiceName = "PanRaProxy");
@@ -175,14 +201,20 @@ public static class ProxyStartup
 
           PanRaProxy [--debug] [--Section:Key=value ...]
           PanRaProxy --check-config [--Section:Key=value ...]
+          PanRaProxy --set-secret radius|firewall-api-key
           PanRaProxy --version
           PanRaProxy --help
 
           --debug         Log the Proxy's own categories at Debug level (dropped packets show their reason)
           --check-config  Validate the settings, the secrets, the RADIUS Clients' names and the CA file,
                           report every problem, and exit without listening
+          --set-secret    From an elevated prompt: read the secret (typed twice without echo, or from
+                          standard input), encrypt it for this machine, store it in
+                          %ProgramData%\PanRaProxy\secrets and restart the service. radius is the one
+                          secret every RADIUS Client shares; firewall-api-key is the Firewall API key.
 
-        Exit codes: 0 success, 1 invalid configuration or listener failure, 2 unknown option.
+        Exit codes: 0 success, 1 invalid configuration, listener failure or secret not stored,
+        2 unknown option.
 
         A console run leaves nothing behind: it writes to the PanRaProxy Event Log and to
         %ProgramData%\PanRaProxy\logs only if the installation created them, and never creates
@@ -190,15 +222,15 @@ public static class ProxyStartup
 
         Settings come from appsettings.json next to the executable, then
         %ProgramData%\PanRaProxy\appsettings.json, then environment variables, then the
-        --Section:Key=value arguments. Secrets come from %ProgramData%\PanRaProxy\secrets
-        or from environment variables of the same name.
+        --Section:Key=value arguments. Secrets come from %ProgramData%\PanRaProxy\secrets, or
+        without a file there from PANRAPROXY_RADIUS_SECRET and PANRAPROXY_FIREWALL_API_KEY.
 
         A console trial run against a lab firewall:
 
-          $env:RADIUS_SECRET_NPS1 = "..."
-          $env:PAN_API_KEY = "..."
+          $env:PANRAPROXY_RADIUS_SECRET = "..."
+          $env:PANRAPROXY_FIREWALL_API_KEY = "..."
           .\PanRaProxy.exe --debug --Radius:Port=18131 `
-              --Radius:Clients:0:Host=10.0.0.10 --Radius:Clients:0:SecretName=RADIUS_SECRET_NPS1 `
+              --Radius:Clients:0:Host=10.0.0.10 `
               --Firewalls:Endpoints:0=https://fw-a.example/api/
 
         Logs: console, rolling files in %ProgramData%\PanRaProxy\logs, and the PanRaProxy

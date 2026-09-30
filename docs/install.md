@@ -12,7 +12,6 @@ The MSI (`PanRaProxy.msi`, per-machine, x64) installs the program and registers 
 | Windows Firewall | Inbound UDP `RADIUS_PORT` for `PanRaProxy.exe` only, optionally limited to `RADIUS_CLIENTS` |
 | Defaults | `appsettings.json` in the install folder: replaced on every upgrade, don't edit |
 | Example | `appsettings.example.json`: a starting point for the site settings |
-| Helper | `Set-PanRaProxySecret.ps1`: sets secrets after installation |
 | Folders | `%ProgramData%\PanRaProxy` and its `logs` subfolder, writable by the service account and kept on uninstall |
 
 ## Public properties
@@ -33,19 +32,27 @@ Run these steps in order from the setup tool, elevated.
    msiexec /i PanRaProxy.msi /qn /l*v "%TEMP%\PanRaProxy-install.log" RADIUS_CLIENTS=10.0.0.10
    ```
 
-2. **Write the site settings** to `%ProgramData%\PanRaProxy\appsettings.json`. Start from `appsettings.example.json`: RADIUS Clients with their `SecretName`, Firewall endpoints, Username Rewrite rules, and `CaFile` if the Firewall certificate comes from a private CA. This file is yours: the MSI never creates, changes or removes it. It contains no secrets.
+2. **Write the site settings** to `%ProgramData%\PanRaProxy\appsettings.json`. Start from `appsettings.example.json`: the RADIUS Clients' hosts, the Firewall endpoints, the domain rules, and `CaFile` if the Firewall certificate comes from a private CA. This file is yours: the MSI never creates, changes or removes it. It contains no secrets and names none.
 
-3. **Set the secrets**, one per `SecretName` / `ApiKeySecretName` in the site settings, and start the service:
+3. **Set the two secrets** with the Proxy itself ([ADR 0007](adr/0007-two-fixed-secrets-set-by-the-binary.md)):
 
    ```powershell
-   $ps = "${env:ProgramFiles}\PanRaProxy\Set-PanRaProxySecret.ps1"
-   & $ps -Name RADIUS_SECRET_NPS1 -Value $radiusSecret        # SecureString from your vault
-   & $ps -Name PAN_API_KEY        -Value $apiKey -Restart     # -Restart starts the service
+   & "${env:ProgramFiles}\PanRaProxy\PanRaProxy.exe" --set-secret radius            # typed twice, no echo
+   & "${env:ProgramFiles}\PanRaProxy\PanRaProxy.exe" --set-secret firewall-api-key
    ```
 
-   Secrets are files in `%ProgramData%\PanRaProxy\secrets`, readable only by SYSTEM, Administrators and `NT SERVICE\PanRaProxy`. They are never passed on a command line or through MSI properties, so they don't end up in MSI logs. Called without `-Value` in an interactive session, the script prompts.
+   - **`radius`** is the one secret every RADIUS Client shares.
+   - **`firewall-api-key`** is the key of the Firewall's API account.
+   - **From a vault or a script,** pipe the value instead of typing it: `$value | PanRaProxy.exe --set-secret radius`.
+   - **Where the secrets go.** Each is encrypted with DPAPI for this machine and stored in `%ProgramData%\PanRaProxy\secrets`. The command sets the folder's ACL: SYSTEM and Administrators have full control, `NT SERVICE\PanRaProxy` can read, and nothing is inherited from ProgramData.
+   - **What never happens.** A secret is never written in plaintext, never passed on a command line, and never goes through MSI properties or logs.
+   - **A copied file is useless elsewhere.** It can't be decrypted on another machine: after reinstalling the machine, set the secrets again.
 
-4. **Check** that the service is running and that event 4004 ("Listening for RADIUS accounting…") is in the `PanRaProxy` log, and that a file appeared in `%ProgramData%\PanRaProxy\logs`.
+4. **Check, then start.** `PanRaProxy.exe --check-config` should say the configuration is valid. Then start the service with `Start-Service PanRaProxy`. Check that event 4004 ("Listening for RADIUS accounting…") is in the `PanRaProxy` log, and that a file appeared in `%ProgramData%\PanRaProxy\logs`.
+
+**Changing a secret later:** run `--set-secret` again. If the service is running, the command restarts it so it reads the new value.
+
+**Coming from an ADR 0003 install:** the site settings' `SecretName` and `ApiKeySecretName` keys are now reported as obsolete (event 3106). Remove them and set the two secrets as above. The old files named after them are no longer read and can be deleted.
 
 ## Upgrade
 
@@ -107,16 +114,19 @@ Remove it in an elevated PowerShell, repair the MSI, then restart the service:
 The same executable runs outside the service: for diagnostics, for a live check against a lab
 firewall, or on a machine without the MSI. **A console run leaves nothing behind.** It writes to the
 `PanRaProxy` Event Log and to `%ProgramData%\PanRaProxy\logs` only if the MSI created them, and it never
-creates registry keys or folders. It says at startup what it isn't using (events 2002 and 4006). An
-elevated prompt is needed only to read the installed secrets (event 2003 otherwise); secrets in
-environment variables work from any prompt.
+creates registry keys or folders. It says at startup what it isn't using (events 2002 and 4006).
+- **An elevated prompt** is needed only to read the installed secrets (event 2003 otherwise).
+- **Without a secret file**, the secrets come from `PANRAPROXY_RADIUS_SECRET` and `PANRAPROXY_FIREWALL_API_KEY`, from any prompt.
+- **A secret file wins** over the variable.
+
+The only command that writes to the machine is `--set-secret`, and only when the administrator runs it.
 
 ```powershell
-$env:RADIUS_SECRET_NPS1 = "..."      # or set the secrets with Set-PanRaProxySecret.ps1
-$env:PAN_API_KEY = "..."
+$env:PANRAPROXY_RADIUS_SECRET = "..."
+$env:PANRAPROXY_FIREWALL_API_KEY = "..."
 .\PanRaProxy.exe --debug `
     --Radius:Port=18131 `
-    --Radius:Clients:0:Host=10.0.0.10 --Radius:Clients:0:SecretName=RADIUS_SECRET_NPS1 `
+    --Radius:Clients:0:Host=10.0.0.10 `
     --Firewalls:Endpoints:0=https://fw-a.example/api/
 ```
 
@@ -135,14 +145,13 @@ unknown option exits with 2 instead of starting, so a typo can't start the Proxy
 |---|---|---|
 | `msiexec` | 0 / 3010 | Success / success, reboot required (not expected) |
 | `msiexec` | 1603 | Failure: see the `/l*v` log. With `START_SERVICE=1`, check event 3106 first |
-| `Set-PanRaProxySecret.ps1` | 0 / 1 | Success / failure (not elevated, service not installed, empty value, service didn't reach Running within 30 s) |
-| `PanRaProxy.exe` | 0 | Stopped normally; `--check-config`: the configuration is valid |
-| `PanRaProxy.exe` | 1 | Invalid configuration (event 3106 lists every problem) or listener failure (event 3103) |
-| `PanRaProxy.exe` | 2 | Unknown option on the command line |
+| `PanRaProxy.exe` | 0 | Stopped normally; `--check-config`: the configuration is valid; `--set-secret`: the secret is stored |
+| `PanRaProxy.exe` | 1 | Invalid configuration (event 3106 lists every problem), listener failure (event 3103), or `--set-secret` couldn't store the secret (not elevated, no value, the two values typed differ) |
+| `PanRaProxy.exe` | 2 | Unknown option on the command line, or `--set-secret` without `radius` or `firewall-api-key` |
 
 ## When the service doesn't start
 
-Event **3106** lists every configuration problem at once: missing RADIUS Clients or Firewalls, an invalid regex, or a secret that isn't set (with the exact `Set-PanRaProxySecret.ps1` command). The service exits with code 1, and Windows retries every 60 s until the configuration is fixed.
+Event **3106** lists every configuration problem at once: missing RADIUS Clients or Firewalls, an invalid regex, a secret that isn't set or can't be decrypted on this machine (with the exact `--set-secret` command), or a setting that is no longer used. The service exits with code 1, and Windows retries every 60 s until the configuration is fixed.
 
 When the settings themselves are valid, 3106 also reports what only shows up while the Proxy is being built: a RADIUS Client host name that doesn't resolve, or a `Firewalls:CaFile` the service account can't read or that holds no certificate. These come one at a time: fix the first, and the next start reports the following one.
 

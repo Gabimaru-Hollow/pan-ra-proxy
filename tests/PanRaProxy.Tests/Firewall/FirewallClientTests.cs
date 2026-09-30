@@ -48,10 +48,9 @@ public class FirewallClientTests
             Microsoft.Extensions.Options.Options.Create(new FirewallOptions
             {
                 Endpoints = firewalls.Length > 0 ? [.. firewalls] : [FirewallA, FirewallB],
-                ApiKeySecretName = "PAN_API_KEY",
                 TimeoutSeconds = 10,
             }),
-            name => name == "PAN_API_KEY" ? "lab-key" : null,
+            name => name == SecretNames.FirewallApiKey ? "lab-key" : null,
             this.time,
             NullLogger<FirewallClient>.Instance);
 

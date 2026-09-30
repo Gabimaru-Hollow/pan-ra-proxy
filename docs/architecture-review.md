@@ -181,7 +181,9 @@ Now an empty `Nt4Domain`, `Replace` or `Lookup` on a domain rule is rejected at 
 
 **Status:** candidate (2026-09-25). Not planned: the repo is at MVP stage and the standalone binary is the preferred way to work with it. The MSI stays, and it has never been installed on a machine.
 
-**Where:** `src/PanRaProxy.Setup/Package.wxs` · `src/PanRaProxy.Setup/Set-PanRaProxySecret.ps1` · `Startup/ProxyStartup.cs` · `Diagnostics/DiagnosticsRegistration.EventLogProblem`.
+**Where:** `src/PanRaProxy.Setup/Package.wxs` · `Startup/ProxyStartup.cs` · `Startup/SecretCommand.cs` · `Diagnostics/DiagnosticsRegistration.EventLogProblem`.
+
+**Update (2026-09-30):** the secrets part is done. `--set-secret` ([ADR 0007](adr/0007-two-fixed-secrets-set-by-the-binary.md)) creates the secrets folder with its ACL and replaced `Set-PanRaProxySecret.ps1`. What remains for `--install` is the Event Log source, the logs folder and the service registration.
 
 **Problem.** The Proxy relies on the MSI for four things:
 - the `PanRaProxy` Event Log and its source;

@@ -152,7 +152,7 @@ Defaults ship in the install folder's `appsettings.json`. Site settings go in `%
   "Radius": {
     "Port": 18131,
     "Clients": [
-      { "Host": "<nps-ip>", "SecretName": "RADIUS_SECRET_NPS1" }
+      { "Host": "<nps-ip>" }
     ]
   },
   "UserId": {
@@ -177,7 +177,6 @@ Defaults ship in the install folder's `appsettings.json`. Site settings go in `%
   },
   "Firewalls": {
     "Endpoints": [ "https://fw-a.contoso.local/api/", "https://fw-b.contoso.local/api/" ],
-    "ApiKeySecretName": "PAN_API_KEY",
     "CaFile": "C:\\ProgramData\\PanRaProxy\\pan-ca.pem",
     "DisableCertificateValidation": false,
     "TimeoutSeconds": 10
@@ -186,6 +185,8 @@ Defaults ship in the install folder's `appsettings.json`. Site settings go in `%
 ```
 
 `BatchWindowMs` is the hard timer: it starts at the first packet of a Batch and doesn't restart on later packets.
+
+The site file names no secret. The two secrets, the RADIUS secret shared by every RADIUS Client and the Firewall API key, are set with `PanRaProxy --set-secret` ([ADR 0007](adr/0007-two-fixed-secrets-set-by-the-binary.md)).
 
 ### 5.5 Tests
 

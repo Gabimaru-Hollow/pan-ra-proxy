@@ -3,8 +3,9 @@
   PAN RADIUS Accounting Proxy: per-machine x64 MSI (WiX v5).
 
   Installs the service (virtual account NT SERVICE\PanRaProxy, restart on failure), its own Event Log,
-  a Windows Firewall rule for RADIUS accounting, the default settings and Set-PanRaProxySecret.ps1.
-  Never carries secrets or site settings: those are provided after installation (docs/install.md).
+  a Windows Firewall rule for RADIUS accounting and the default settings.
+  Never carries secrets or site settings: those are provided after installation, the secrets with
+  the executable's set-secret command (ADR 0007, docs/install.md).
 
   Public properties for setup tools:
     RADIUS_PORT     UDP port the firewall rule opens (default 18131). Must match Radius:Port in the site settings.
@@ -85,16 +86,12 @@
       </Component>
 
       <!-- The Proxy's own log under "Applications and Services Logs", not the shared Application log.
-           Event IDs stay upstream's (NFR-07). -->
+           The Proxy never creates it itself: a console run leaves nothing behind. -->
       <Component Id="EventLogSource" Bitness="always64">
         <util:EventSource Name="PanRaProxy"
                           Log="PanRaProxy"
                           EventMessageFile="[%SystemRoot]\Microsoft.NET\Framework64\v4.0.30319\EventLogMessages.dll"
                           KeyPath="yes" />
-      </Component>
-
-      <Component Id="SecretHelper" Bitness="always64">
-        <File Id="SetSecretScript" Source="Set-PanRaProxySecret.ps1" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 

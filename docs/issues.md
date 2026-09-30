@@ -19,6 +19,7 @@ When an entry is closed, move it to *Resolved* with the commit, or to an ADR if 
 | 7 | [A hanging directory lookup stalls the Mapping decision](#7-a-hanging-directory-lookup-stalls-the-mapping-decision) | Low | Verified by reading |
 | 8 | [Shutdown stops the Firewall submission first](#8-shutdown-stops-the-firewall-submission-first) | Low | Verified by reading |
 | 9 | [A setting value that starts with a dash](#9-a-setting-value-that-starts-with-a-dash) | Low | Verified by reading |
+| 10 | [What `--set-secret` does to the machine](#10-what---set-secret-does-to-the-machine) | Medium | Unverified: needs an elevated run on an install |
 
 ---
 
@@ -102,6 +103,24 @@ This is accepted by P3-4 (no persistence, Interim-Updates rebuild), and it costs
 **What.** `CommandLine` treats any argument that starts with `-` or `/` and has no `:` as a switch. In the two-token form, a value that starts with a dash is taken as an unknown option, and the Proxy exits with 2. For example, in `--UserId:BatchWindowMs -1` the `-1` is rejected. The `=` form works: `--UserId:BatchWindowMs=-1`.
 
 **To decide.** Document "use `--Key=value`" (the usage already shows only that form), or let a dash argument through when the previous one was a setting without a value.
+
+## 10. What `--set-secret` does to the machine
+
+**What.** The tests cover the command's logic (reading, encryption, the stored format, exit codes). They replace its three effects on the machine with fakes, because a test session isn't elevated and must not change ACLs or services:
+
+- **The ACL** (`SecretCommand.ProtectDirectory`):
+  - inheritance from ProgramData removed;
+  - full control for SYSTEM and Administrators;
+  - read for `NT SERVICE\PanRaProxy`, resolved by name (if the service isn't installed, the name doesn't resolve and a note says so).
+- **The service restart** (`SecretCommand.RestartServiceIfRunning`): stop, then start, with 30 s for each.
+- **The prompt** (`SecretCommand.ReadFromConsole`): no echo, the value typed twice, or piped from standard input.
+
+**To verify.** On an installed machine, from an elevated PowerShell:
+1. Run `--set-secret radius` twice: once typed, once piped.
+2. Check the folder's ACL (`Get-Acl $env:ProgramData\PanRaProxy\secrets | Format-List`).
+3. Check that a non-elevated prompt gets exit 1 with the "elevated prompt" message.
+4. Check that the running service restarts and logs 4004 again.
+5. Check that `--check-config` from a non-elevated prompt reports 2003 rather than "not set".
 
 ---
 

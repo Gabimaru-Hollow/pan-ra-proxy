@@ -13,33 +13,38 @@ namespace PanRaProxy.Radius;
 public delegate IPAddress[] HostResolver(string host);
 
 /// <summary>
-/// The shared secret of each RADIUS Client, keyed by source IP.
+/// The RADIUS Clients' addresses, and the one secret they share (ADR 0007).
 /// </summary>
 public sealed class RadiusClientRegistry
 {
-    private readonly Dictionary<IPAddress, byte[]> secrets;
+    private readonly HashSet<IPAddress> addresses;
+    private readonly byte[] secret;
 
-    public RadiusClientRegistry(IReadOnlyDictionary<IPAddress, string> secretsByAddress)
+    public RadiusClientRegistry(IEnumerable<IPAddress> addresses, string secret)
     {
-        this.secrets = secretsByAddress.ToDictionary(p => Normalize(p.Key), p => Encoding.UTF8.GetBytes(p.Value));
+        this.addresses = addresses.Select(Normalize).ToHashSet();
+        this.secret = Encoding.UTF8.GetBytes(secret);
     }
 
-    public bool TryGetSecret(IPAddress source, [NotNullWhen(true)] out byte[]? secret) =>
-        this.secrets.TryGetValue(Normalize(source), out secret);
+    public bool TryGetSecret(IPAddress source, [NotNullWhen(true)] out byte[]? secret)
+    {
+        secret = this.addresses.Contains(Normalize(source)) ? this.secret : null;
+        return secret is not null;
+    }
 
     /// <summary>
-    /// Resolves each configured host to its IPv4 addresses once, at startup. A host that doesn't resolve,
-    /// or two hosts sharing an address with different secrets, stops the Proxy (NFR-08).
+    /// Resolves each configured host to its IPv4 addresses once, at startup. A host that doesn't resolve
+    /// stops the Proxy (NFR-08).
     /// </summary>
     public static RadiusClientRegistry FromOptions(RadiusOptions options, SecretLookup secrets, HostResolver resolve)
     {
-        Dictionary<IPAddress, string> secretsByAddress = [];
+        string secret = secrets(SecretNames.Radius)
+                        ?? throw new InvalidOperationException($"The secret '{SecretNames.Radius}' is not set.");
+
+        List<IPAddress> resolved = [];
 
         foreach (RadiusClientOptions client in options.Clients)
         {
-            string secret = secrets(client.SecretName)
-                            ?? throw new InvalidOperationException($"Secret '{client.SecretName}' for RADIUS Client '{client.Host}' is not set.");
-
             IPAddress[] addresses;
             try
             {
@@ -57,18 +62,10 @@ public sealed class RadiusClientRegistry
                 throw new InvalidOperationException($"RADIUS Client '{client.Host}' did not resolve to an IPv4 address.");
             }
 
-            foreach (IPAddress address in addresses.Select(Normalize))
-            {
-                if (secretsByAddress.TryGetValue(address, out string? existing) && existing != secret)
-                {
-                    throw new InvalidOperationException($"Address {address} belongs to more than one RADIUS Client with different secrets.");
-                }
-
-                secretsByAddress[address] = secret;
-            }
+            resolved.AddRange(addresses);
         }
 
-        return new RadiusClientRegistry(secretsByAddress);
+        return new RadiusClientRegistry(resolved, secret);
     }
 
     private static IPAddress Normalize(IPAddress address) =>

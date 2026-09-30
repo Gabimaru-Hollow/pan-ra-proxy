@@ -16,16 +16,14 @@ public class ProxyOptionsTests
     private static readonly Dictionary<string, string?> ValidConfig = new()
     {
         ["Radius:Clients:0:Host"] = "10.0.0.10",
-        ["Radius:Clients:0:SecretName"] = "RADIUS_SECRET",
         ["Firewalls:Endpoints:0"] = "https://fw-a.test/api/",
         ["Firewalls:Endpoints:1"] = "https://fw-b.test/api/",
-        ["Firewalls:ApiKeySecretName"] = "PAN_API_KEY",
     };
 
     private static readonly Dictionary<string, string> ValidEnvironment = new()
     {
-        ["RADIUS_SECRET"] = "lab-secret",
-        ["PAN_API_KEY"] = "lab-key",
+        [SecretNames.Radius] = "lab-secret",
+        [SecretNames.FirewallApiKey] = "lab-key",
     };
 
     private static ServiceProvider BuildProvider(
@@ -80,21 +78,35 @@ public class ProxyOptionsTests
     }
 
     [Fact]
-    public void Missing_radius_secret_in_environment_is_rejected()
+    public void A_missing_radius_secret_says_how_to_set_it()
     {
-        using ServiceProvider provider = BuildProvider(environment: new() { ["PAN_API_KEY"] = "lab-key" });
+        using ServiceProvider provider = BuildProvider(environment: new() { [SecretNames.FirewallApiKey] = "lab-key" });
 
         OptionsValidationException ex = AssertInvalid<RadiusOptions>(provider);
-        Assert.Contains(ex.Failures, f => f.Contains("RADIUS_SECRET"));
+        Assert.Contains(ex.Failures, f => f.Contains("--set-secret radius"));
     }
 
     [Fact]
-    public void Missing_api_key_in_environment_is_rejected()
+    public void A_missing_api_key_says_how_to_set_it()
     {
-        using ServiceProvider provider = BuildProvider(environment: new() { ["RADIUS_SECRET"] = "lab-secret" });
+        using ServiceProvider provider = BuildProvider(environment: new() { [SecretNames.Radius] = "lab-secret" });
 
         OptionsValidationException ex = AssertInvalid<FirewallOptions>(provider);
-        Assert.Contains(ex.Failures, f => f.Contains("PAN_API_KEY"));
+        Assert.Contains(ex.Failures, f => f.Contains("--set-secret firewall-api-key"));
+    }
+
+    [Fact]
+    public void Settings_that_named_secrets_are_reported_as_obsolete()
+    {
+        // ADR 0003 settings: binding would ignore them, and the administrator would wonder why.
+        using ServiceProvider provider = BuildProvider(new()
+        {
+            ["Radius:Clients:0:SecretName"] = "RADIUS_SECRET_NPS1",
+            ["Firewalls:ApiKeySecretName"] = "PAN_API_KEY",
+        });
+
+        Assert.Contains(AssertInvalid<RadiusOptions>(provider).Failures, f => f.Contains("Radius:Clients:0:SecretName is no longer used"));
+        Assert.Contains(AssertInvalid<FirewallOptions>(provider).Failures, f => f.Contains("Firewalls:ApiKeySecretName is no longer used"));
     }
 
     [Fact]
@@ -103,7 +115,6 @@ public class ProxyOptionsTests
         using ServiceProvider provider = BuildProvider(new()
         {
             ["Radius:Clients:0:Host"] = null,
-            ["Radius:Clients:0:SecretName"] = null,
         });
 
         AssertInvalid<RadiusOptions>(provider);
@@ -115,7 +126,6 @@ public class ProxyOptionsTests
         using ServiceProvider provider = BuildProvider(new()
         {
             ["Radius:Clients:1:Host"] = "10.0.0.10",
-            ["Radius:Clients:1:SecretName"] = "RADIUS_SECRET",
         });
 
         OptionsValidationException ex = AssertInvalid<RadiusOptions>(provider);
@@ -250,7 +260,7 @@ public class ProxyOptionsTests
         Assert.Contains("Radius:Clients must list at least one RADIUS Client.", message);
         Assert.Contains("UserId:UsernameFilter is not a valid regular expression", message);
         Assert.Contains("Firewalls:Endpoints must list at least one Firewall.", message);
-        Assert.Contains("Firewalls:ApiKeySecretName is required.", message);
+        Assert.Contains("The secret 'firewall-api-key' is not set.", message);
     }
 
     [Fact]

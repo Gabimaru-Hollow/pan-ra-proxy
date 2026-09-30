@@ -9,11 +9,6 @@ public sealed class FirewallOptions
 
     public List<Uri> Endpoints { get; set; } = [];
 
-    /// <summary>
-    /// Name of the secret holding the API key (NFR-01, <see cref="SecretStore"/>).
-    /// </summary>
-    public string ApiKeySecretName { get; set; } = "";
-
     public string? CaFile { get; set; }
 
     public bool DisableCertificateValidation { get; set; }

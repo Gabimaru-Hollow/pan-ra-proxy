@@ -32,8 +32,8 @@ public sealed class FirewallClient
     {
         this.http = http;
         this.firewalls = options.Value.Endpoints;
-        this.apiKey = secrets(options.Value.ApiKeySecretName)
-                      ?? throw new InvalidOperationException($"Secret '{options.Value.ApiKeySecretName}' is not set.");
+        this.apiKey = secrets(SecretNames.FirewallApiKey)
+                      ?? throw new InvalidOperationException($"The secret '{SecretNames.FirewallApiKey}' is not set.");
         this.attemptTimeout = TimeSpan.FromSeconds(options.Value.TimeoutSeconds);
         this.time = time;
         this.logger = logger;

@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
 namespace PanRaProxy.Options;
@@ -28,9 +29,10 @@ internal sealed class RadiusOptionsValidator(SecretLookup secrets) : IValidateOp
             {
                 failures.Add($"Radius:Clients:{i}:Host is required.");
             }
-
-            OptionsChecks.RequireSecret(secrets, client.SecretName, $"Radius:Clients:{i}:SecretName", failures);
         }
+
+        // One shared secret for every RADIUS Client (ADR 0007).
+        OptionsChecks.RequireSecret(secrets, SecretNames.Radius, failures);
 
         foreach (string duplicate in options.Clients
                      .Where(c => !string.IsNullOrWhiteSpace(c.Host))
@@ -117,7 +119,7 @@ internal sealed class FirewallOptionsValidator(SecretLookup secrets) : IValidate
             }
         }
 
-        OptionsChecks.RequireSecret(secrets, options.ApiKeySecretName, "Firewalls:ApiKeySecretName", failures);
+        OptionsChecks.RequireSecret(secrets, SecretNames.FirewallApiKey, failures);
 
         if (!string.IsNullOrEmpty(options.CaFile) && !File.Exists(options.CaFile))
         {
@@ -133,23 +135,40 @@ internal sealed class FirewallOptionsValidator(SecretLookup secrets) : IValidate
     }
 }
 
+/// <summary>
+/// The settings ADR 0007 removed. Binding would ignore them silently, leaving the administrator to wonder
+/// why the secret they name isn't used, so they fail validation with what to do instead.
+/// </summary>
+internal sealed class ObsoleteSettingsValidator(IConfiguration configuration) : IValidateOptions<RadiusOptions>, IValidateOptions<FirewallOptions>
+{
+    public ValidateOptionsResult Validate(string? name, RadiusOptions options) =>
+        OptionsChecks.Result(configuration.GetSection("Radius:Clients").GetChildren()
+            .Where(client => client["SecretName"] is not null)
+            .Select(client => $"Radius:Clients:{client.Key}:SecretName is no longer used: every RADIUS Client shares one secret, set with PanRaProxy --set-secret {SecretNames.Radius}.")
+            .ToList());
+
+    public ValidateOptionsResult Validate(string? name, FirewallOptions options) =>
+        OptionsChecks.Result(configuration["Firewalls:ApiKeySecretName"] is null
+            ? []
+            : [$"Firewalls:ApiKeySecretName is no longer used: the API key is set with PanRaProxy --set-secret {SecretNames.FirewallApiKey}."]);
+}
+
 internal static class OptionsChecks
 {
     public static readonly TimeSpan RegexMatchTimeout = TimeSpan.FromMilliseconds(100);
 
-    public static void RequireSecret(SecretLookup secrets, string secretName, string key, List<string> failures)
+    public static void RequireSecret(SecretLookup secrets, string name, List<string> failures)
     {
-        if (string.IsNullOrWhiteSpace(secretName))
+        try
         {
-            failures.Add($"{key} is required.");
+            if (string.IsNullOrEmpty(secrets(name)))
+            {
+                failures.Add($"The secret '{name}' is not set. Set it with PanRaProxy --set-secret {name}, from an elevated prompt.");
+            }
         }
-        else if (!SecretStore.IsValidName(secretName))
+        catch (InvalidOperationException ex)
         {
-            failures.Add($"{key} '{secretName}' is not a valid secret name (letters, digits, '_', '-', '.').");
-        }
-        else if (string.IsNullOrEmpty(secrets(secretName)))
-        {
-            failures.Add($"{key} names secret '{secretName}', which is not set. Set it with Set-PanRaProxySecret.ps1 -Name {secretName}.");
+            failures.Add(ex.Message); // a value this machine can't decrypt
         }
     }
 

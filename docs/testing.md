@@ -23,6 +23,11 @@ never leave the machine they were taken on. `-Pcap` and `-Detail` pick a capture
 and `-DomainArgs` replaces the default domain rules (the ones in the example below). A wrong secret
 fails the replay slowly, because it waits out the acknowledgement timeout for every packet.
 
+The replay hands its secrets to the Proxy as `PANRAPROXY_RADIUS_SECRET` and `PANRAPROXY_FIREWALL_API_KEY`. A secret
+file in `%ProgramData%\PanRaProxy\secrets` wins over those variables (ADR 0007). On a machine where
+`--set-secret` has been run, the Proxy would therefore use the installed RADIUS secret instead of the
+capture's, and every packet would be discarded. Replay on a development machine.
+
 ## End-to-end replay of a live capture
 
 `tools/e2e/live-replay.py` runs the whole path on one machine, with no installation and no administrator rights:

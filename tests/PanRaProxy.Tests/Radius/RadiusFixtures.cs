@@ -46,12 +46,8 @@ public static class RadiusFixtures
         File.Value.Fixtures.Where(f => f.Expect != "Accepted").Select(f => new object[] { f });
 
     /// <summary>
-    /// The fixture secrets, registered for the fixture addresses and for loopback (used by the UDP tests).
+    /// The fixture addresses and loopback (used by the UDP tests), sharing the fixtures' one secret.
     /// </summary>
-    public static RadiusClientRegistry Registry()
-    {
-        Dictionary<IPAddress, string> secrets = Clients.ToDictionary(p => IPAddress.Parse(p.Key), p => p.Value);
-        secrets[IPAddress.Loopback] = Clients.Values.First();
-        return new RadiusClientRegistry(secrets);
-    }
+    public static RadiusClientRegistry Registry() =>
+        new([.. Clients.Keys.Select(IPAddress.Parse), IPAddress.Loopback], Clients.Values.Single());
 }

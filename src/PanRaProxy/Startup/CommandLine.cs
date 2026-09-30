@@ -1,3 +1,5 @@
+using PanRaProxy.Options;
+
 namespace PanRaProxy.Startup;
 
 public enum StartupMode
@@ -11,6 +13,9 @@ public enum StartupMode
     Help,
 
     Version,
+
+    /// <summary>Encrypt one of the Proxy's secrets for this machine and store it (ADR 0007).</summary>
+    SetSecret,
 }
 
 /// <summary>
@@ -18,7 +23,7 @@ public enum StartupMode
 /// and goes to configuration. A switch the Proxy doesn't know is an error rather than a setting, so a
 /// typo such as <c>--chek-config</c> can't start the Proxy instead of checking it.
 /// </summary>
-public sealed record CommandLine(StartupMode Mode, bool Debug, IReadOnlyList<string> SettingsArgs, string? Error)
+public sealed record CommandLine(StartupMode Mode, bool Debug, IReadOnlyList<string> SettingsArgs, string? Error, string? SecretName = null)
 {
     public static CommandLine Parse(IReadOnlyList<string> args)
     {
@@ -26,10 +31,18 @@ public sealed record CommandLine(StartupMode Mode, bool Debug, IReadOnlyList<str
         bool debug = false;
         List<string> settings = [];
 
-        foreach (string arg in args)
+        for (int i = 0; i < args.Count; i++)
         {
+            string arg = args[i];
+
             switch (arg)
             {
+                case "--set-secret":
+                    string? name = i + 1 < args.Count ? args[i + 1] : null;
+                    return name is not null && SecretNames.All.Contains(name)
+                        ? new CommandLine(StartupMode.SetSecret, debug, [], null, name)
+                        : new CommandLine(mode, debug, settings, $"--set-secret needs the name of a secret: {string.Join(" or ", SecretNames.All)}.");
+
                 case "--help" or "-h" or "-?" or "/?":
                     mode = StartupMode.Help;
                     break;

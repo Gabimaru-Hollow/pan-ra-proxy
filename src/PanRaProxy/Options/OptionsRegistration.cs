@@ -20,6 +20,10 @@ internal static class OptionsRegistration
         services.AddSingleton<IValidateOptions<UserIdOptions>, UserIdOptionsValidator>();
         services.AddSingleton<IValidateOptions<FirewallOptions>, FirewallOptionsValidator>();
 
+        ObsoleteSettingsValidator obsolete = new(configuration);
+        services.AddSingleton<IValidateOptions<RadiusOptions>>(obsolete);
+        services.AddSingleton<IValidateOptions<FirewallOptions>>(obsolete);
+
         return services;
     }
 }

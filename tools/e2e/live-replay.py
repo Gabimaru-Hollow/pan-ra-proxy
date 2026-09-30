@@ -233,10 +233,8 @@ def start_proxy(args, cert_file, https_port, log_file):
     settings = [
         f"--Radius:Port={args.radius_port}",
         "--Radius:Clients:0:Host=127.0.0.1",
-        "--Radius:Clients:0:SecretName=RADIUS_SECRET",
         f"--Firewalls:Endpoints:0=https://localhost:{https_port}/api/",
         f"--Firewalls:CaFile={cert_file}",
-        "--Firewalls:ApiKeySecretName=PAN_API_KEY",
         f"--UserId:TimeoutMinutes={args.timeout_minutes}",
         f"--UserId:InterimIntervalMinutes={args.interim_minutes}",
         f"--UserId:LogoutOnStop={'true' if args.logout_on_stop else 'false'}",
@@ -250,7 +248,9 @@ def start_proxy(args, cert_file, https_port, log_file):
         settings.append(f"--UserId:Domain:Rules:{index}:Match={pattern}")
         settings.append(f"--UserId:Domain:Rules:{index}:Nt4Domain={domain}")
 
-    environment = dict(os.environ, RADIUS_SECRET=args.secret, PAN_API_KEY="e2e-dummy-key",
+    # ADR 0007: the Proxy's two secrets have fixed names. A secret file in %ProgramData%\PanRaProxy\secrets
+    # would win over these variables, so replay on a machine where --set-secret was never run.
+    environment = dict(os.environ, PANRAPROXY_RADIUS_SECRET=args.secret, PANRAPROXY_FIREWALL_API_KEY="e2e-dummy-key",
                        DOTNET_ENVIRONMENT="Development", Logging__LogLevel__PanRaProxy="Debug")
 
     handle = log_file.open("w", encoding="utf-8")

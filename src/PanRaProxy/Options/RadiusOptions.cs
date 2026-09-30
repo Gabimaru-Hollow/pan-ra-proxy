@@ -13,12 +13,10 @@ public sealed class RadiusOptions
 }
 
 /// <summary>
-/// A RADIUS Client, identified by host name or IP. The shared secret is never in configuration:
-/// <see cref="SecretName"/> names the secret that holds it (NFR-01, <see cref="SecretStore"/>).
+/// A RADIUS Client, identified by host name or IP. Every RADIUS Client shares the one RADIUS secret,
+/// which is never in configuration (ADR 0007, <see cref="SecretStore"/>).
 /// </summary>
 public sealed class RadiusClientOptions
 {
     public string Host { get; set; } = "";
-
-    public string SecretName { get; set; } = "";
 }

@@ -22,6 +22,9 @@ internal static partial class Log
     [LoggerMessage(2003, LogLevel.Warning, "This session can't read the secrets folder {Directory}: every secret will look unset. Run from an elevated prompt.")] // new
     public static partial void SecretsFolderUnreadable(ILogger logger, string directory);
 
+    [LoggerMessage(2004, LogLevel.Warning, "The secret '{Name}' is stored in plaintext. Encrypt it with PanRaProxy --set-secret {Name}, from an elevated prompt.")] // new
+    public static partial void SecretInPlaintext(ILogger logger, string name);
+
     [LoggerMessage(2101, LogLevel.Warning, "Could not translate {Upn}: not found in the directory")]
     public static partial void NameNotFound(ILogger logger, string upn);
 

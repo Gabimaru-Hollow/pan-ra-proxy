@@ -34,11 +34,9 @@ public class EndToEndTests(Xunit.Abstractions.ITestOutputHelper output)
         {
             ["Radius:Port"] = port.ToString(),
             ["Radius:Clients:0:Host"] = "127.0.0.1",
-            ["Radius:Clients:0:SecretName"] = "RADIUS_SECRET",
             ["UserId:UsernameRewrites:0:Match"] = @"^([^@\\]+)@domain\.local$",
             ["UserId:UsernameRewrites:0:Replace"] = @"DOMAIN\$1",
             ["Firewalls:Endpoints:0"] = "https://fw-a.test/api/",
-            ["Firewalls:ApiKeySecretName"] = "PAN_API_KEY",
         });
         builder.Logging.ClearProviders();
         CapturingLoggerProvider logs = new();
@@ -49,8 +47,8 @@ public class EndToEndTests(Xunit.Abstractions.ITestOutputHelper output)
         builder.Services.AddPanRaProxy(builder.Configuration);
         builder.Services.Replace(ServiceDescriptor.Singleton(new SecretLookup(name => name switch
         {
-            "RADIUS_SECRET" => RadiusFixtures.Clients.Values.First(),
-            "PAN_API_KEY" => "lab-key",
+            SecretNames.Radius => RadiusFixtures.Clients.Values.Single(),
+            SecretNames.FirewallApiKey => "lab-key",
             _ => null,
         })));
         builder.Services.Replace(ServiceDescriptor.Singleton(new ProcessExit(code => throw new InvalidOperationException($"exit {code}"))));

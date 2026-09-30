@@ -3,6 +3,7 @@ using PanRaProxy.Options;
 
 namespace PanRaProxy.Tests.Options;
 
+[System.Runtime.Versioning.SupportedOSPlatform("windows")] // DPAPI
 public sealed class SecretsAndSiteSettingsTests : IDisposable
 {
     private readonly string directory = Directory.CreateTempSubdirectory("panraproxy-").FullName;
@@ -10,64 +11,80 @@ public sealed class SecretsAndSiteSettingsTests : IDisposable
     public void Dispose() => Directory.Delete(this.directory, recursive: true);
 
     [Fact]
-    public void Secret_file_is_read_without_its_trailing_newline()
+    public void A_plaintext_secret_file_is_read_without_its_trailing_newline()
     {
-        File.WriteAllText(Path.Combine(this.directory, "RADIUS_SECRET_NPS1"), "s3cr3t with spaces \r\n");
+        File.WriteAllText(Path.Combine(this.directory, SecretNames.Radius), "s3cr3t with spaces \r\n");
 
-        Assert.Equal("s3cr3t with spaces ", SecretStore.Read("RADIUS_SECRET_NPS1", this.directory));
+        Assert.Equal("s3cr3t with spaces ", SecretStore.Read(SecretNames.Radius, this.directory));
+        Assert.True(SecretStore.IsStoredInPlaintext(SecretNames.Radius, this.directory));
     }
 
     [Fact]
-    public void Missing_file_falls_back_to_an_environment_variable()
+    public void A_written_secret_is_encrypted_on_disk_and_read_back()
     {
-        string name = $"PANRAPROXY_TEST_{Guid.NewGuid():N}";
-        Environment.SetEnvironmentVariable(name, "from-env");
+        SecretStore.Write(SecretNames.FirewallApiKey, "LUFRPT1-api-key", this.directory);
+
+        string onDisk = File.ReadAllText(Path.Combine(this.directory, SecretNames.FirewallApiKey));
+        Assert.StartsWith("dpapi:v1:", onDisk);
+        Assert.DoesNotContain("LUFRPT1", onDisk);
+        Assert.False(SecretStore.IsStoredInPlaintext(SecretNames.FirewallApiKey, this.directory));
+        Assert.Equal("LUFRPT1-api-key", SecretStore.Read(SecretNames.FirewallApiKey, this.directory));
+    }
+
+    [Fact]
+    public void Writing_again_replaces_the_secret_and_leaves_no_temporary_file()
+    {
+        SecretStore.Write(SecretNames.Radius, "first", this.directory);
+        SecretStore.Write(SecretNames.Radius, "second", this.directory);
+
+        Assert.Equal("second", SecretStore.Read(SecretNames.Radius, this.directory));
+        Assert.Equal([SecretNames.Radius], Directory.GetFiles(this.directory).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public void A_secret_this_machine_cannot_decrypt_says_how_to_fix_it()
+    {
+        File.WriteAllText(Path.Combine(this.directory, SecretNames.Radius), "dpapi:v1:AQAAAG5vdCBhIHJlYWwgYmxvYg==");
+
+        InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() => SecretStore.Read(SecretNames.Radius, this.directory));
+        Assert.Contains("--set-secret radius", ex.Message);
+    }
+
+    [Fact]
+    public void Without_a_file_the_environment_variable_is_used()
+    {
+        // The two fixed names map to fixed variables; only this test sets the RADIUS one.
+        Environment.SetEnvironmentVariable("PANRAPROXY_RADIUS_SECRET", "from-env");
         try
         {
-            Assert.Equal("from-env", SecretStore.Read(name, this.directory));
+            Assert.Equal("from-env", SecretStore.Read(SecretNames.Radius, this.directory));
+
+            File.WriteAllText(Path.Combine(this.directory, SecretNames.Radius), "from-file");
+            Assert.Equal("from-file", SecretStore.Read(SecretNames.Radius, this.directory));
         }
         finally
         {
-            Environment.SetEnvironmentVariable(name, null);
+            Environment.SetEnvironmentVariable("PANRAPROXY_RADIUS_SECRET", null);
         }
-    }
-
-    [Fact]
-    public void File_wins_over_environment_variable()
-    {
-        string name = $"PANRAPROXY_TEST_{Guid.NewGuid():N}";
-        File.WriteAllText(Path.Combine(this.directory, name), "from-file");
-        Environment.SetEnvironmentVariable(name, "from-env");
-        try
-        {
-            Assert.Equal("from-file", SecretStore.Read(name, this.directory));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(name, null);
-        }
-    }
-
-    [Fact]
-    public void Empty_file_and_unknown_name_are_not_set()
-    {
-        File.WriteAllText(Path.Combine(this.directory, "EMPTY"), "\r\n");
-
-        Assert.Null(SecretStore.Read("EMPTY", this.directory));
-        Assert.Null(SecretStore.Read($"UNKNOWN_{Guid.NewGuid():N}", this.directory));
     }
 
     [Theory]
+    [InlineData("RADIUS_SECRET_NPS1")] // an ADR 0003 name: no longer read
     [InlineData(@"..\secrets\x")]
-    [InlineData("../x")]
-    [InlineData(@"C:\Windows\win.ini")]
-    [InlineData(".hidden")]
     [InlineData("")]
-    [InlineData("a b")]
-    public void Secret_names_cannot_escape_the_secrets_folder(string name)
+    public void Only_the_two_known_secrets_are_read(string name)
     {
-        Assert.False(SecretStore.IsValidName(name));
+        File.WriteAllText(Path.Combine(this.directory, "RADIUS_SECRET_NPS1"), "old");
+
         Assert.Null(SecretStore.Read(name, this.directory));
+    }
+
+    [Fact]
+    public void An_empty_file_is_not_set()
+    {
+        File.WriteAllText(Path.Combine(this.directory, SecretNames.Radius), "\r\n");
+
+        Assert.Null(SecretStore.Read(SecretNames.Radius, this.directory));
     }
 
     [Fact]
