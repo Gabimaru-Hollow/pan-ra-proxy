@@ -5,8 +5,21 @@ namespace PanRaProxy.Firewall;
 
 internal static class FirewallRegistration
 {
-    public static IServiceCollection AddFirewallSubmission(this IServiceCollection services)
+    /// <summary>
+    /// The Batch sender, and where it sends: the Firewalls, or nowhere in a dry run. A dry run registers no
+    /// <see cref="FirewallClient"/>, so it needs no Firewall settings and no API key.
+    /// </summary>
+    public static IServiceCollection AddFirewallSubmission(this IServiceCollection services, bool dryRun)
     {
+        services.AddHostedService<BatchSender>();
+
+        if (dryRun)
+        {
+            services.AddSingleton<IBatchSubmitter, DryRunSubmitter>();
+            return services;
+        }
+
+        services.AddSingleton<IBatchSubmitter>(sp => sp.GetRequiredService<FirewallClient>());
         services.AddSingleton(sp =>
         {
             FirewallOptions options = sp.GetRequiredService<IOptions<FirewallOptions>>().Value;
@@ -21,8 +34,6 @@ internal static class FirewallRegistration
 
             return ActivatorUtilities.CreateInstance<FirewallClient>(sp, new HttpClient(handler));
         });
-
-        services.AddHostedService<BatchSender>();
 
         return services;
     }

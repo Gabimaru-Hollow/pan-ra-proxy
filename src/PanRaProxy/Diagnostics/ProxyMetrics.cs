@@ -61,6 +61,7 @@ public sealed class ProxyMetrics
             SubmissionResult.Accepted => "accepted",
             SubmissionResult.ApiError => "api-error",
             SubmissionResult.Unreachable => "unreachable",
+            SubmissionResult.NotSent => "not-sent",
             _ => "unknown",
         };
 

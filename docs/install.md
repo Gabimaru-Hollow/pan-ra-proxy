@@ -139,6 +139,29 @@ unknown option exits with 2 instead of starting, so a typo can't start the Proxy
 `--Section:Key=value`, which is also how the end-to-end replay drives the Proxy
 ([testing.md](testing.md)).
 
+### A dry run on production accounting
+
+`--dry-run` takes the real path from the NPS forwarding to the Batches, and stops before the Firewall: each Login and Logout is logged (events 4007, 4008) instead of being sent. Event 2005 at startup says so.
+
+It needs only the RADIUS side, the `radius` secret and `Radius:Clients`: no `Firewalls` section, no API key, no `CaFile`. It's meant for a trial on a VM that receives the production accounting from NPS without touching any Firewall's User-ID table.
+
+On a VM without the MSI, leaving nothing on the machine:
+
+```powershell
+mkdir D:\PanRaProxy-test\logs                      # the only thing you create
+# D:\PanRaProxy-test holds PanRaProxy.exe and an appsettings.json with
+#   Radius:Clients, the UserId domain rules, and "Logging": { "File": { "Directory": "D:\\PanRaProxy-test\\logs" } }
+$env:PANRAPROXY_RADIUS_SECRET = "..."              # no --set-secret: no secrets folder, no ACL
+D:\PanRaProxy-test\PanRaProxy.exe --check-config --dry-run
+D:\PanRaProxy-test\PanRaProxy.exe --dry-run
+```
+
+**Reading the result.** The file log gets one line per entry, e.g. `INF 4007 PanRaProxy.Firewall.DryRunSubmitter | Dry run: Login XDOMAIN\mrossi on 10.20.30.40, timeout 15 min`. You can compare it with the Mappings the Vector pipeline produces from the NPS logs.
+
+**Using `Lookup` rules.** The VM must be domain-joined, since the lookups go to the real directory.
+
+**Cleaning up.** Delete the folder: nothing else was written. As a service for a longer trial, put the switch in the service's command line rather than in the settings, so it can't be left on by mistake: `sc.exe config PanRaProxy binPath= "\"C:\Program Files\PanRaProxy\PanRaProxy.exe\" --dry-run"`.
+
 ## Exit codes
 
 | Tool | Code | Meaning |

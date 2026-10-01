@@ -182,7 +182,12 @@ public static class ProxyStartup
         }
 
         builder.Services.AddWindowsService(options => options.ServiceName = "PanRaProxy");
-        builder.Services.AddPanRaProxy(builder.Configuration);
+        builder.Services.AddPanRaProxy(builder.Configuration, command.DryRun);
+
+        if (command.DryRun)
+        {
+            notes.Insert(0, Log.DryRun); // first and loud: nobody should mistake this for the real thing
+        }
         environment.ReplaceServices?.Invoke(builder.Services);
 
         IHost host = builder.Build();
@@ -199,13 +204,16 @@ public static class ProxyStartup
 
         Runs as the Windows service PanRaProxy, or from a console for diagnostics and live checks.
 
-          PanRaProxy [--debug] [--Section:Key=value ...]
-          PanRaProxy --check-config [--Section:Key=value ...]
+          PanRaProxy [--debug] [--dry-run] [--Section:Key=value ...]
+          PanRaProxy --check-config [--dry-run] [--Section:Key=value ...]
           PanRaProxy --set-secret radius|firewall-api-key
           PanRaProxy --version
           PanRaProxy --help
 
           --debug         Log the Proxy's own categories at Debug level (dropped packets show their reason)
+          --dry-run       Receive and decide as usual, but log each Login and Logout (events 4007, 4008)
+                          instead of sending it: nothing reaches a Firewall. Needs only the RADIUS side:
+                          the radius secret and Radius:Clients, no Firewalls section, no API key
           --check-config  Validate the settings, the secrets, the RADIUS Clients' names and the CA file,
                           report every problem, and exit without listening
           --set-secret    From an elevated prompt: read the secret (typed twice without echo, or from

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.EventLog;
 using PanRaProxy.Diagnostics;
+using PanRaProxy.Firewall;
 using PanRaProxy.Options;
 using PanRaProxy.Startup;
 
@@ -132,6 +133,37 @@ public sealed class ProxyStartupTests : IDisposable
         Assert.Equal(1, ProxyStartup.Run(["--set-secret", SecretNames.Radius], this.Console(typedSecret: typed)));
         Assert.False(File.Exists(Path.Combine(this.SecretsDirectory, SecretNames.Radius)));
         Assert.Equal(0, this.restarts);
+    }
+
+    [Fact]
+    public void Dry_run_is_a_flag_that_combines_with_check_config()
+    {
+        Assert.True(CommandLine.Parse(["--dry-run"]).DryRun);
+        Assert.Equal(StartupMode.Run, CommandLine.Parse(["--dry-run"]).Mode);
+        Assert.Equal(StartupMode.CheckConfig, CommandLine.Parse(["--check-config", "--dry-run"]).Mode);
+        Assert.False(CommandLine.Parse(["--check-config"]).DryRun);
+    }
+
+    [Fact]
+    public void A_dry_run_needs_only_the_radius_side()
+    {
+        // The production trial: NPS forwards to the Proxy, nothing reaches a Firewall. No endpoint, no API key.
+        StartupEnvironment radiusOnly = this.Console() with
+        {
+            ReplaceServices = services => services.Replace(ServiceDescriptor.Singleton(new SecretLookup(name => name == SecretNames.Radius ? "lab" : null))),
+        };
+
+        Assert.Equal(1, ProxyStartup.Run(this.Args("--check-config", "--Radius:Clients:0:Host=10.0.0.10"), radiusOnly));
+        Assert.Equal(0, ProxyStartup.Run(this.Args("--check-config", "--dry-run", "--Radius:Clients:0:Host=10.0.0.10"), radiusOnly));
+    }
+
+    [Fact]
+    public void A_dry_run_has_no_firewall_client_at_all()
+    {
+        using IHost host = ProxyStartup.BuildHost(CommandLine.Parse(this.Args("--dry-run", "--Radius:Clients:0:Host=10.0.0.10")), this.Console());
+
+        Assert.IsType<DryRunSubmitter>(host.Services.GetRequiredService<IBatchSubmitter>());
+        Assert.Null(host.Services.GetService<FirewallClient>());
     }
 
     [Fact]

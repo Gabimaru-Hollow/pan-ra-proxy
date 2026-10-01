@@ -13,7 +13,7 @@ namespace PanRaProxy.Firewall;
 /// reached (connection or TLS failure, timeout, HTTP 5xx); the last Firewall that answered is tried
 /// first next time.
 /// </summary>
-public sealed class FirewallClient
+public sealed class FirewallClient : IBatchSubmitter
 {
     private readonly HttpClient http;
     private readonly IReadOnlyList<Uri> firewalls;

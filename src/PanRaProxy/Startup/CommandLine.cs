@@ -23,12 +23,13 @@ public enum StartupMode
 /// and goes to configuration. A switch the Proxy doesn't know is an error rather than a setting, so a
 /// typo such as <c>--chek-config</c> can't start the Proxy instead of checking it.
 /// </summary>
-public sealed record CommandLine(StartupMode Mode, bool Debug, IReadOnlyList<string> SettingsArgs, string? Error, string? SecretName = null)
+public sealed record CommandLine(StartupMode Mode, bool Debug, IReadOnlyList<string> SettingsArgs, string? Error, string? SecretName = null, bool DryRun = false)
 {
     public static CommandLine Parse(IReadOnlyList<string> args)
     {
         StartupMode mode = StartupMode.Run;
         bool debug = false;
+        bool dryRun = false;
         List<string> settings = [];
 
         for (int i = 0; i < args.Count; i++)
@@ -59,6 +60,10 @@ public sealed record CommandLine(StartupMode Mode, bool Debug, IReadOnlyList<str
                     debug = true;
                     break;
 
+                case "--dry-run":
+                    dryRun = true;
+                    break;
+
                 default:
                     if (IsUnknownSwitch(arg))
                     {
@@ -70,7 +75,7 @@ public sealed record CommandLine(StartupMode Mode, bool Debug, IReadOnlyList<str
             }
         }
 
-        return new CommandLine(mode, debug, settings, null);
+        return new CommandLine(mode, debug, settings, null, DryRun: dryRun);
     }
 
     /// <summary>

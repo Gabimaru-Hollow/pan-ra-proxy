@@ -99,6 +99,50 @@ public class EndToEndTests(Xunit.Abstractions.ITestOutputHelper output)
         Assert.DoesNotContain(logs.EventIds, id => id is >= 3000 and < 4000);
     }
 
+    [Fact]
+    public async Task A_dry_run_logs_the_logins_and_needs_no_firewall()
+    {
+        int port = FreeUdpPort();
+
+        HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Radius:Port"] = port.ToString(),
+            ["Radius:Clients:0:Host"] = "127.0.0.1",
+            ["UserId:UsernameRewrites:0:Match"] = @"^([^@\\]+)@domain\.local$",
+            ["UserId:UsernameRewrites:0:Replace"] = @"DOMAIN\$1",
+        });
+        builder.Logging.ClearProviders();
+        CapturingLoggerProvider logs = new();
+        builder.Logging.AddProvider(logs);
+
+        // No Firewalls section and no API key: only the RADIUS secret.
+        builder.Services.AddPanRaProxy(builder.Configuration, dryRun: true);
+        builder.Services.Replace(ServiceDescriptor.Singleton(new SecretLookup(name => name == SecretNames.Radius ? RadiusFixtures.Clients.Values.Single() : null)));
+
+        using IHost host = builder.Build();
+        Assert.True(StartupValidation.Validate(host.Services));
+        await host.StartAsync();
+
+        using UdpClient radius = new(new IPEndPoint(IPAddress.Loopback, 0));
+        foreach (string name in new[] { "start", "start-upn" })
+        {
+            await radius.SendAsync(RadiusFixtures.Get(name).RequestBytes, new IPEndPoint(IPAddress.Loopback, port));
+            await radius.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(2));
+        }
+
+        for (int i = 0; i < 100 && logs.EventIds.Count(id => id == 4007) < 2; i++)
+        {
+            await Task.Delay(20);
+        }
+
+        await host.StopAsync();
+
+        Assert.Equal(2, logs.EventIds.Count(id => id == 4007)); // one Login per request
+        Assert.DoesNotContain(4002, logs.EventIds);              // no Firewall applied anything
+        Assert.DoesNotContain(logs.EventIds, id => id is >= 3000 and < 4000);
+    }
+
     private static int FreeUdpPort()
     {
         using UdpClient probe = new(new IPEndPoint(IPAddress.Loopback, 0));

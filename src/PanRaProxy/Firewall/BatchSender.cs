@@ -6,12 +6,12 @@ using PanRaProxy.Options;
 namespace PanRaProxy.Firewall;
 
 /// <summary>
-/// Reads Batches and submits them to the Firewall, one at a time. A failing Batch is logged and
-/// dropped (P3-4); nothing stops the loop except shutdown.
+/// Reads Batches and submits them, one at a time: to the Firewall, or nowhere in a dry run. A failing
+/// Batch is logged and dropped (P3-4); nothing stops the loop except shutdown.
 /// </summary>
 internal sealed class BatchSender(
     MappingBatcher batcher,
-    FirewallClient firewall,
+    IBatchSubmitter submitter,
     ProxyMetrics metrics,
     IOptions<FirewallOptions> options,
     ILogger<BatchSender> logger) : BackgroundService
@@ -37,7 +37,7 @@ internal sealed class BatchSender(
 
             try
             {
-                SubmissionResult result = await firewall.SubmitAsync(batch, stoppingToken);
+                SubmissionResult result = await submitter.SubmitAsync(batch, stoppingToken);
                 metrics.BatchSubmitted(batch, result);
                 this.Report(batch, result);
             }
@@ -84,6 +84,10 @@ internal sealed class BatchSender(
             case SubmissionResult.Unreachable unreachable:
                 Log.NoFirewallReachable(logger, logins, logouts, string.Join("; ", unreachable.Attempts.Select(a => $"{a.Firewall}: {a.Reason}")));
                 break;
+
+            case SubmissionResult.NotSent:
+                break; // the dry run has logged every entry already
+
         }
     }
 }

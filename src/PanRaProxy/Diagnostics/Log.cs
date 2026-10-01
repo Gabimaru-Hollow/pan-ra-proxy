@@ -25,6 +25,9 @@ internal static partial class Log
     [LoggerMessage(2004, LogLevel.Warning, "The secret '{Name}' is stored in plaintext. Encrypt it with PanRaProxy --set-secret {Name}, from an elevated prompt.")] // new
     public static partial void SecretInPlaintext(ILogger logger, string name);
 
+    [LoggerMessage(2005, LogLevel.Warning, "Dry run (--dry-run): Logins and Logouts are logged (events 4007, 4008) and not sent to any Firewall")] // new
+    public static partial void DryRun(ILogger logger);
+
     [LoggerMessage(2101, LogLevel.Warning, "Could not translate {Upn}: not found in the directory")]
     public static partial void NameNotFound(ILogger logger, string upn);
 
@@ -100,6 +103,12 @@ internal static partial class Log
     [LoggerMessage(4005, LogLevel.Debug, "Dropped {Request}: {Reason}")] // new
     public static partial void RequestDropped(ILogger logger, AccountingRequest request, DropReason reason);
 
-    [LoggerMessage(4006, LogLevel.Information, "No log files: {Directory} doesn't exist, and a console run creates nothing on the machine")] // new
+    [LoggerMessage(4007, LogLevel.Information, "Dry run: Login {Username} on {IpAddress}, timeout {TimeoutMinutes} min")] // new
+    public static partial void DryRunLogin(ILogger logger, string username, IPAddress ipAddress, int timeoutMinutes);
+
+    [LoggerMessage(4008, LogLevel.Information, "Dry run: Logout {Username} on {IpAddress}")] // new
+    public static partial void DryRunLogout(ILogger logger, string username, IPAddress ipAddress);
+
+    [LoggerMessage(4006, LogLevel.Information,"No log files: {Directory} doesn't exist, and a console run creates nothing on the machine")] // new
     public static partial void FileLogNotUsed(ILogger logger, string directory);
 }
