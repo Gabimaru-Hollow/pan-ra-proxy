@@ -24,5 +24,5 @@ Also: `docs/install.md` (MSI, secrets, logs, console runs), `docs/testing.md` (`
 
 Two things to know before running anything:
 
-- `src/PanRaProxy` is the .NET 8 service under development. `src/Lithnet.Pan.RAProxy` is the upstream net462 code, kept only until the parallel test with Vector is signed off; it carries the four P1 fixes and nothing else.
+- `src/PanRaProxy` is the .NET 8 service, and the only code in the repository. The upstream `lithnet/pan-ra-proxy` is its origin, not a codebase kept alongside it (ADR 0008). Its code is only on `master` (baseline `049992e`), where the spec's file and line references point.
 - Live captures (`detail-*`, `*.pcap`) hold real usernames and IPs and allow an offline attack on the RADIUS shared secret. They are git-ignored, and anything derived from them that gets committed must be anonymised.

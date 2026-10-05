@@ -4,7 +4,7 @@ Starting spec for reusing and refactoring `lithnet/pan-ra-proxy`. Terms are defi
 
 ## 1. Deliverables
 
-1. Corrective patches to the current code (§3.3), enough for a first test alongside the Vector pipeline.
+1. Corrective patches to the current code (§3.3), enough for a first test alongside the Vector pipeline. *Superseded: the .NET 8 Proxy runs that test with `--dry-run`, and the net462 code was removed ([ADR 0008](adr/0008-the-repository-holds-only-the-dotnet8-proxy.md)).*
 2. A refactor to .NET 8 (§5; see [ADR 0002](adr/0002-dotnet8-refactor-over-go.md)).
 
 ## 2. Upstream repository state
@@ -19,6 +19,8 @@ Starting spec for reusing and refactoring `lithnet/pan-ra-proxy`. Terms are defi
 | Installer | WiX (`Lithnet.Pan.RAProxy.Setup`) |
 
 The project has low activity but isn't abandoned.
+
+The file and line references in §2 and §3 are to the upstream code at `049992e` (`master`). This branch no longer contains it ([ADR 0008](adr/0008-the-repository-holds-only-the-dotnet8-proxy.md)).
 
 ### 2.1 Code map
 
@@ -74,6 +76,7 @@ P1-1, P1-2, and P1-3 together with P1-4 are enough for a test alongside the Vect
 |---|---|
 | Hard-timer Batch window instead of one call per Login | [ADR 0001](adr/0001-batch-with-hard-timer.md) |
 | .NET 8 refactor for now; Go rewrite set aside | [ADR 0002](adr/0002-dotnet8-refactor-over-go.md) |
+| The repository holds only the .NET 8 Proxy; the net462 code is removed | [ADR 0008](adr/0008-the-repository-holds-only-the-dotnet8-proxy.md) |
 | Logout-on-Stop: config flag, default `false` | §5.4 |
 | Certificate validation: config flag `DisableCertificateValidation`, default `false` | §5.4 |
 | Canonical Username from ordered domain rules; the directory lookup is one rule action among others, cached | §5.4, FR-06 |

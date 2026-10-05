@@ -2,7 +2,7 @@
 
 Six **candidates, not decisions**: places where the .NET 8 code is harder to change or to test than it needs to be, with the file and line that makes each one concrete. None of them contradicts [ADR 0001](adr/0001-batch-with-hard-timer.md), [0002](adr/0002-dotnet8-refactor-over-go.md) or [0003](adr/0003-secrets-as-protected-files-provided-after-install.md), and none changes what the Proxy does: the terms are from [CONTEXT.md](../CONTEXT.md), the requirements from [refactoring-spec.md](refactoring-spec.md).
 
-Reviewed at `ed83069` on `refactor/net8-fork`, with 150 tests green. The review looked at what changed recently (`Mappings`, `Options`, `Diagnostics`, `Program.cs`), not at the whole repository, and skipped the net462 code, which is kept only until the parallel test with Vector is signed off.
+Reviewed at `ed83069` on `refactor/net8-fork`, with 150 tests green. The review looked at what changed recently (`Mappings`, `Options`, `Diagnostics`, `Program.cs`), not at the whole repository, and skipped the net462 code, which was in the repository then. It has since been removed ([ADR 0008](adr/0008-the-repository-holds-only-the-dotnet8-proxy.md)).
 
 | # | Candidate | Strength |
 |---|---|---|
@@ -237,6 +237,5 @@ free, because it would make the code harder to read for whoever operates it?
 
 ## Not in scope here
 
-- The net462 code (`src/Lithnet.Pan.RAProxy`), kept only for the parallel test.
 - `tools/e2e/live-replay.py`: its expectation is deliberately a second implementation of the rules, so duplication there is the point.
 - Anything ADR 0001–0003 settled.
