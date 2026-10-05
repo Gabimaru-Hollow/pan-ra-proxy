@@ -11,10 +11,10 @@ The net462 code had been kept, with the four P1 fixes (spec §3.3), to run along
 ## Considered Options
 
 - **Keep the net462 code until the parallel test is signed off** (the earlier plan). Rejected: the parallel test no longer needs it.
-- **Tag the P1-fixed net462 version before removing it.** Rejected: nobody intends to run it. It stays reachable in this branch's history, at the commit that applied the P1 fixes.
+- **Tag the P1-fixed net462 version before removing it.** Rejected: nobody intends to run it. It stays reachable in the history, at the commit that applied the P1 fixes.
 
 ## Consequences
 
 - There is no in-repo fallback to the upstream Proxy. If the .NET 8 Proxy fails its production trial, the fallback is the Vector pipeline, which keeps running throughout.
-- The file and line references in [refactoring-spec.md](../refactoring-spec.md) §2–3 point at the upstream code at the fork baseline `049992e` (`master`), not at anything in this branch.
+- The file and line references in [refactoring-spec.md](../refactoring-spec.md) §2–3 point at the upstream code at the fork baseline `049992e`, which is still in the history, not at anything in the current tree.
 - [install.md](../install.md) still describes upgrading from, and not coexisting with, an *installed* upstream service. That is about machines, not code, and stays as long as such an install can exist.

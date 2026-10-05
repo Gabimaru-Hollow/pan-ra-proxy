@@ -20,7 +20,7 @@ Starting spec for reusing and refactoring `lithnet/pan-ra-proxy`. Terms are defi
 
 The project has low activity but isn't abandoned.
 
-The file and line references in §2 and §3 are to the upstream code at `049992e` (`master`). This branch no longer contains it ([ADR 0008](adr/0008-the-repository-holds-only-the-dotnet8-proxy.md)).
+The file and line references in §2 and §3 are to the upstream code at the fork baseline `049992e`, which is still in the history (`git show 049992e:<path>`). The current tree no longer contains it ([ADR 0008](adr/0008-the-repository-holds-only-the-dotnet8-proxy.md)).
 
 ### 2.1 Code map
 

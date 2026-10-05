@@ -24,5 +24,5 @@ Also: `docs/install.md` (MSI, secrets, logs, console runs), `docs/testing.md` (`
 
 Two things to know before running anything:
 
-- `src/PanRaProxy` is the .NET 8 service, and the only code in the repository. The upstream `lithnet/pan-ra-proxy` is its origin, not a codebase kept alongside it (ADR 0008). Its code is only on `master` (baseline `049992e`), where the spec's file and line references point.
+- `src/PanRaProxy` is the .NET 8 service, and the only code in the repository. The upstream `lithnet/pan-ra-proxy` is its origin, not a codebase kept alongside it (ADR 0008). Its code survives only in the history, at the fork baseline `049992e`, where the spec's file and line references point (`git show 049992e:<path>`).
 - Live captures (`detail-*`, `*.pcap`) hold real usernames and IPs and allow an offline attack on the RADIUS shared secret. They are git-ignored, and anything derived from them that gets committed must be anonymised.
