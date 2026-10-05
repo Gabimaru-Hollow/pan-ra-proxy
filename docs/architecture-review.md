@@ -132,7 +132,7 @@ The discussion added a requirement: the same binary runs in a console for diagno
 
 **Why speculative.** There is one adapter, so the seam would be hypothetical. Revisit if a second policy appears: sending to both HA peers, or a health check.
 
-**Closed (2026-10-05).** It was on hold from 2026-09-25 until the firewall team answered how the passive HA peer handles a User-ID call. It accepts the call, records the Mapping and syncs it to the active peer over HA1 ([deployment.md](deployment.md), answer 1). Any peer that answers is therefore a valid target, and the current rule is enough: fail over only when a peer can't be reached, and start next time from the last peer that answered. No second policy is coming, so there is nothing to separate. Reopen if a Firewall is ever configured that refuses or drops User-ID calls on the passive peer.
+**Closed (2026-10-05).** It was on hold from 2026-09-25 until the firewall team answered how the passive HA peer handles a User-ID call. It accepts the call, records the Mapping and syncs it to the active peer over HA1 ([deployment.md, answer 1](deployment.md#answers-from-the-firewall-team-2026-10-05)). Any peer that answers is therefore a valid target, and the current rule is enough: fail over only when a peer can't be reached, and start next time from the last peer that answered. No second policy is coming, so there is nothing to separate. Reopen if a Firewall is ever configured that refuses or drops User-ID calls on the passive peer.
 
 ---
 
@@ -228,7 +228,7 @@ continue.
 | 3 | Should an invalid rule be unrepresentable, or is validation-at-startup enough? | Whether configuration will ever be reloaded without a restart. If it never is, compiling once at startup may already be sufficient, and the duplication is only the `user`-group check | ADR if rejected on the "two statements of the same rule are fine because …" ground |
 | 4 | Does the event-ID table need to live in one file? | How NFR-07 would be kept honest with the messages spread across modules: a shared constants file, or a test that reads the IDs and compares them with a table | Rejected: ADR 0005 |
 | 5 | Which startup behaviours must be pinned by a test? | The list of things an administrator depends on: exit codes, `--help`, `--version`, the Event Log fallback message. If the console surface is going to grow (say a `--check-config`), the module is justified now rather than later | No ADR needed: it is a question of when, not whether |
-| 6 | Is a second failover policy coming? | How the passive HA peer answers a User-ID call. **Answered 2026-10-05**: it accepts and syncs to the active peer ([deployment.md](deployment.md), answer 1), so no second policy is coming | Closed without an ADR: the reason is recorded in the candidate itself |
+| 6 | Is a second failover policy coming? | How the passive HA peer answers a User-ID call. **Answered 2026-10-05**: it accepts and syncs to the active peer ([deployment.md, answer 1](deployment.md#answers-from-the-firewall-team-2026-10-05)), so no second policy is coming | Closed without an ADR: the reason is recorded in the candidate itself |
 | 12 | Will the Proxy be installed without the MSI? | How it will be rolled out once past the MVP: MSI, binary alone, or both | Nothing to record: it stays a candidate |
 
 **Two questions that sit above the list.** First: is there a candidate missing, something that has actually

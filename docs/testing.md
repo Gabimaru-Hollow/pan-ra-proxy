@@ -28,6 +28,12 @@ file in `%ProgramData%\PanRaProxy\secrets` wins over those variables (ADR 0007).
 `--set-secret` has been run, the Proxy would therefore use the installed RADIUS secret instead of the
 capture's, and every packet would be discarded. Replay on a development machine.
 
+## In CI
+
+`.github/workflows/ci.yml` runs on every push to `master` and every pull request:
+- **Unit and module tests:** `build\test-all.ps1 -SkipReplay` on Windows. The replay stays local, since captures are never committed.
+- **Links between documents:** [lychee](https://github.com/lycheeverse/lychee) in offline mode checks every relative link in the Markdown files and its `#anchor`. Write a reference to another document as a link with its anchor, not as prose ("deployment.md, answer 2"), so a renamed heading fails the build instead of going stale. To run the same check locally: `lychee --offline --include-fragments '**/*.md'`.
+
 ## End-to-end replay of a live capture
 
 `tools/e2e/live-replay.py` runs the whole path on one machine, with no installation and no administrator rights:

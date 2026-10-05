@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Unit and module tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      # Live captures are never committed, so the end-to-end replay runs only locally (docs/testing.md).
+      - name: build/test-all.ps1 -SkipReplay
+        shell: pwsh
+        run: ./build/test-all.ps1 -SkipReplay
+
+  doc-links:
+    name: Links between documents
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Offline: relative links and their anchors only, so a rename or a removed file fails the build
+      # while an external site being down doesn't.
+      - uses: lycheeverse/lychee-action@v2
+        with:
+          args: --offline --include-fragments --no-progress './**/*.md'
+          fail: true
