@@ -72,15 +72,30 @@ The interval is declared to the Proxy as `UserId.InterimIntervalMinutes` (defaul
 ## Firewall configuration
 
 - Create a dedicated API account whose Admin Role is limited to XML API > User-ID Agent.
-- List the active firewall and its HA peer as Firewalls in the Proxy's configuration, in failover order.
+- List the **management IPs of both HA peers** as Firewalls in the Proxy's configuration, in failover order, not the cluster VIP. During a failover the VIP belongs to neither peer, and moving it can take minutes in some deployments, so anything sent in that window is lost. With both management IPs, an attempt against the failed peer times out and the Proxy moves straight to the other one (answer 1 below).
+- Consider a shorter `Firewalls:TimeoutSeconds` than the default 10: the firewall team suggests 3–5 s per attempt. It's a site choice. It bounds how long a Batch waits on a dead peer, and it has to stay above the API's normal response time.
 
-## Open questions for the firewall team
+## Answers from the firewall team (2026-10-05)
 
-1. **How does the passive HA peer answer a User-ID call?** If it answers with an API error rather than
-   being unreachable, the Proxy won't fail over to the active one: its failover rule treats an API error as
-   final (see `SubmissionResult.ApiError`). The answer decides architecture review candidate 6.
-2. **Does a `<logout>` entry with `name=A`, `ip=X` remove a Mapping `X → B`?** In other words: does PAN-OS
-   match the name, or only the IP? Inside a Batch the Proxy never sends such a Logout. Across two Batches it
-   can: a late Stop from A after B took the IP. If PAN-OS matches only the IP, turning Logout-on-Stop on
-   would let that Stop remove B's Mapping until B's next Interim-Update. With Logout-on-Stop off (the
-   default) no Logout is ever sent.
+1. **How does the passive HA peer answer a User-ID call?** The firewall team says it **accepts the call, records
+   the Mapping and syncs it to the active peer over HA1**. It doesn't refuse the call. The team didn't say
+   whether this was tested on the cluster or taken from the documentation.
+   - **What it means for the Proxy.** Any peer that answers is a valid target. That covers the case where the
+     Proxy keeps writing to a peer that has since become passive, after a failover back with preemption. The
+     current rule (fail over only when a peer can't be reached, start next time from the last peer that
+     answered) is enough. This closes architecture review candidate 6.
+   - **What stays a risk.** If HA1 is late or down, a Mapping written on one peer may not reach the other.
+     That's inherent to HA and holds for the VIP too: the Proxy can't see it.
+   - **Retries are harmless.** A peer can apply a Batch and fail to answer. The Proxy then sends the same
+     Batch to the other peer, and the HA sync brings the same Batch back to the first one. The result is the
+     same set of Mappings, because a Batch carries no state ([ADR 0006](adr/0006-no-mapping-state-in-the-proxy.md)).
+2. **Does a `<logout>` entry with `name=A`, `ip=X` remove a Mapping `X → B`?** **No.** PAN-OS matches the name and
+   the IP. It finds no Mapping and answers `Delete mapping failed`, which the Proxy already ignores
+   (`UidMessage.ParseResponse`). The sources are the PAN-OS documentation of `<logout>` and a community case
+   where a Logout with a different name failed in exactly this way.
+   - **What it means for the Proxy.** A late Stop from A, arriving after B took the IP, can't remove B's
+     Mapping.
+   - **What it doesn't change.** Logout-on-Stop stays **off by default**. The main risk was never across
+     users. It's the spurious Stops measured above: 22 of 34 Stops are for the same user and IP that stay
+     connected, and there the names match. Before turning it on for Shared Accounts, see
+     [issues.md #11](issues.md#11-how-wide-a-logout-without-blockstart-reaches).
