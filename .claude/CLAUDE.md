@@ -14,7 +14,7 @@ If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is 
 This is a fork of `lithnet/pan-ra-proxy`. It turns RADIUS accounting into Palo Alto User-ID Mappings.
 Read these before changing anything, in this order:
 
-1. **`CONTEXT.md`** — the glossary. Use these words (Mapping, Login, Logout, Batch, Canonical Username, Placeholder IP, Shared Account, RADIUS Client, Firewall) in code, tests, logs and commits.
+1. **`GLOSSARY.md`** — the glossary. Use these words (Mapping, Login, Logout, Batch, Canonical Username, Placeholder IP, Shared Account, RADIUS Client, Firewall) in code, tests, logs and commits.
 2. **`docs/adr/`** — decisions already taken. Don't re-litigate them; amend the ADR if one turns out wrong.
 3. **`docs/refactoring-spec.md`** — requirements (FR/NFR), the code review of the upstream and the configuration. Event IDs are listed in `src/PanRaProxy/Diagnostics/Log.cs`, metrics in `Diagnostics/ProxyMetrics.cs`.
 4. **`docs/deployment.md`** — the environment and the evidence measured from the live capture.
