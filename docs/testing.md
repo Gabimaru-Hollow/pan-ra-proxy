@@ -6,6 +6,31 @@ Two levels: unit and module tests in `tests/PanRaProxy.Tests` (`dotnet test`), a
 `artifacts/tests/*.uid-messages.log`, one section per Batch with the Logins and Logouts and the raw
 XML, so a run can be read afterwards instead of only asserted on.
 
+## Test-driven development
+
+Code changes go test-first. This is how the project works, not a preference.
+
+1. **Red.** Write the test that states the behaviour, and watch it fail for the reason you expect. A test that has never failed has not shown it can.
+2. **Green.** Write the smallest change that passes it.
+3. **Refactor** with the tests green.
+4. **Gate.** Before proposing a commit, `.\build\test-all.ps1 -Quiet` is green, replay included (see below). Run `-SkipReplay` only for a change that cannot reach the Proxy's behaviour, and say so.
+
+A bug is fixed the same way: first a test that reproduces it (the defects under *Resolved* in [issues/README.md](issues/README.md) were each reproduced before they were fixed), then the fix. A doubtful case that cannot be reproduced yet is not fixed: it is recorded in [issues/](issues/README.md) and the code stays as it is.
+
+**Where a test goes.** The test tree mirrors the source tree: `Radius/`, `Mappings/`, `Firewall/`, `Options/`, `Diagnostics/` and `Startup/` in `tests/PanRaProxy.Tests` match the folders in `src/PanRaProxy`, and `EndToEndTests.cs` composes the whole graph the Proxy ships (`AddPanRaProxy`), replacing only what varies. Test a module through its interface, with the terms of [GLOSSARY.md](../GLOSSARY.md): `CanonicalUsernameTests` asks what a username becomes, `ProxyStartupTests` goes from arguments to an exit code. If a test has to reach into a module to ask its question, the interface is the thing to change.
+
+**What the unit and module tests cover** (the list grows with the Proxy, so a new requirement from [specs.md](specs.md) adds its row here):
+- request and response authenticators, against packets generated independently from RFC 2866 (`tests/fixtures/generate_radius_fixtures.py`, not from the Proxy's own code);
+- the attribute reader against malformed and random input: it must never throw on packet content;
+- accounting into Login and Logout: Placeholder IPs, Machine Accounts, Logout-on-Stop, the three username forms, Shared Accounts;
+- the Batch window and the queue limits, on a `FakeTimeProvider`, not on the wall clock;
+- XML API responses (success, global error, per-entry failures), through a stub `HttpMessageHandler`;
+- TLS trust, options validation, and the startup surface (switches, exit codes, `--check-config`).
+
+**What stays out of reach of a test, and where it is recorded.** Anything that needs an elevated run, the service account or a real Firewall is not tested; it is listed in [issues/](issues/README.md) with how to verify it by hand (for example [issue 10](issues/10-what-set-secret-does-to-the-machine.md)). Tests replace those effects with fakes on purpose, because a test session must not change ACLs or services.
+
+**Two independent implementations.** The replay below computes its expected Mappings in Python from the FreeRADIUS detail file, so a mistake in the C# rules cannot quietly become the expectation. Do not "fix" the script by copying the C# logic into it.
+
 ## Both at once
 
 `build\test-all.ps1` runs the unit tests, publishes the executable and replays the newest capture in the

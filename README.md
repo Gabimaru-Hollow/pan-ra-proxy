@@ -17,7 +17,7 @@ It is a .NET 8 rework of [lithnet/pan-ra-proxy](https://github.com/lithnet/pan-r
 | [GLOSSARY.md](GLOSSARY.md) | The glossary: Mapping, Login, Logout, Batch, Canonical Username… |
 | [INSTALL.md](INSTALL.md) | MSI, secrets, logs, console runs, `--check-config`, `--dry-run` |
 | [docs/environment.md](docs/environment.md) | The target environment and what the live capture measured |
-| [docs/testing.md](docs/testing.md) | Unit tests and the end-to-end replay, through `build\test-all.ps1` |
+| [docs/testing.md](docs/testing.md) | The test-first workflow, unit tests and the end-to-end replay, through `build\test-all.ps1` |
 | [docs/specs.md](docs/specs.md) | Requirements (FR/NFR), configuration, design notes and open questions |
 | [docs/adr/](docs/adr/) | Decisions |
 | [docs/issues/](docs/issues/README.md) | Known issues, unverified or awaiting a decision |

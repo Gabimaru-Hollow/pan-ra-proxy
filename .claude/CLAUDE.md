@@ -31,4 +31,4 @@ Two things to know before running anything:
 - Reply in Italian. Docs, code and commit messages stay in English.
 - The user decides each step: propose with an honest assessment of the trade-offs, ask, then act. Record a doubtful or unverified case as a new file in `docs/issues/` (and its row in the index), an ADR or the open questions in `docs/specs.md`, and leave the code as it is.
 - Commit only when asked. End each piece of work by proposing the commit message, then write it to a file in the scratchpad and run `git commit -F <file>`.
-- Code changes go test-first: a red test, then the fix. Before proposing a commit, `build\test-all.ps1 -Quiet` is green, replay included (`docs/testing.md`).
+- Code changes go test-first: a red test, then the fix. Before proposing a commit, `build\test-all.ps1 -Quiet` is green, replay included (`docs/testing.md`, *Test-driven development*).
