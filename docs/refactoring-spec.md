@@ -1,6 +1,6 @@
 # Refactoring spec: fork of lithnet/pan-ra-proxy
 
-Starting spec for reusing and refactoring `lithnet/pan-ra-proxy`. Terms are defined in [GLOSSARY.md](../GLOSSARY.md). The deployment context is in [deployment.md](deployment.md), and the decisions are in [adr/](adr/).
+Starting spec for reusing and refactoring `lithnet/pan-ra-proxy`. Terms are defined in [GLOSSARY.md](../GLOSSARY.md). The deployment context is in [environment.md](environment.md), and the decisions are in [adr/](adr/).
 
 ## 1. Deliverables
 
@@ -96,7 +96,7 @@ P1-1, P1-2, and P1-3 together with P1-4 are enough for a test alongside the Vect
 | `EventLog.WriteEntry` to the Application log | Own `PanRaProxy` Event Log, rolling files and console, all through `ILogger` (files written by Serilog, ADR 0004) | Event IDs stable, upstream's numbering where it applies (NFR-07) |
 | `EventLog.WriteEntry` | `ILogger` with the EventLog provider | |
 | `TranslateName` P/Invoke | Unchanged, reached through a domain rule's `Lookup`, with a cache in front of it | |
-| WiX v3 installer (net462, NETWORK SERVICE) | WiX v5 MSI: self-contained executable, virtual account `NT SERVICE\PanRaProxy`, restart on failure, Event Log source, firewall rule; secrets and site settings provided after install ([install.md](install.md), [ADR 0003](adr/0003-secrets-as-protected-files-provided-after-install.md)) | |
+| WiX v3 installer (net462, NETWORK SERVICE) | WiX v5 MSI: self-contained executable, virtual account `NT SERVICE\PanRaProxy`, restart on failure, Event Log source, firewall rule; secrets and site settings provided after install ([INSTALL.md](../INSTALL.md), [ADR 0003](adr/0003-secrets-as-protected-files-provided-after-install.md)) | |
 
 Carry over unchanged: `RadiusAttribute.cs`, the authentication logic in `AccountingListener.cs`, the response parsing in `Message.cs`, and the Batch deduplication in `MessageQueue.cs` (with P1-4 fixed).
 

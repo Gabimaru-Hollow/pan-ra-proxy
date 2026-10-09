@@ -5,7 +5,7 @@
   Installs the service (virtual account NT SERVICE\PanRaProxy, restart on failure), its own Event Log,
   a Windows Firewall rule for RADIUS accounting and the default settings.
   Never carries secrets or site settings: those are provided after installation, the secrets with
-  the executable's set-secret command (ADR 0007, docs/install.md).
+  the executable's set-secret command (ADR 0007, INSTALL.md).
 
   Public properties for setup tools:
     RADIUS_PORT     UDP port the firewall rule opens (default 18131). Must match Radius:Port in the site settings.
@@ -39,7 +39,7 @@
     </StandardDirectory>
 
     <!-- Site settings, secrets and logs: created here so the service account can write them,
-         and kept on uninstall (docs/install.md). -->
+         and kept on uninstall (INSTALL.md). -->
     <StandardDirectory Id="CommonAppDataFolder">
       <Directory Id="DATAFOLDER" Name="PanRaProxy">
         <Directory Id="LOGSFOLDER" Name="logs" />

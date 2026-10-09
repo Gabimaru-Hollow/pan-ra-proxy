@@ -1,6 +1,6 @@
 # Installing the Proxy
 
-The MSI (`PanRaProxy.msi`, per-machine, x64) installs the program and registers it with Windows. It never carries secrets or site settings. Those are provided after installation, so the same MSI works for every site. Terms are defined in [GLOSSARY.md](../GLOSSARY.md).
+The MSI (`PanRaProxy.msi`, per-machine, x64) installs the program and registers it with Windows. It never carries secrets or site settings. Those are provided after installation, so the same MSI works for every site. Terms are defined in [GLOSSARY.md](GLOSSARY.md).
 
 ## What the MSI does
 
@@ -34,7 +34,7 @@ Run these steps in order from the setup tool, elevated.
 
 2. **Write the site settings** to `%ProgramData%\PanRaProxy\appsettings.json`. Start from `appsettings.example.json`: the RADIUS Clients' hosts, the Firewall endpoints, the domain rules, and `CaFile` if the Firewall certificate comes from a private CA. This file is yours: the MSI never creates, changes or removes it. It contains no secrets and names none.
 
-3. **Set the two secrets** with the Proxy itself ([ADR 0007](adr/0007-two-fixed-secrets-set-by-the-binary.md)):
+3. **Set the two secrets** with the Proxy itself ([ADR 0007](docs/adr/0007-two-fixed-secrets-set-by-the-binary.md)):
 
    ```powershell
    & "${env:ProgramFiles}\PanRaProxy\PanRaProxy.exe" --set-secret radius            # typed twice, no echo
@@ -137,7 +137,7 @@ It doesn't listen, and it writes no log file and no Event Log entry. Use it afte
 settings, before restarting the service. `--help` prints the usage and `--version` the build. An
 unknown option exits with 2 instead of starting, so a typo can't start the Proxy. Any setting can be overridden as
 `--Section:Key=value`, which is also how the end-to-end replay drives the Proxy
-([testing.md](testing.md)).
+([testing.md](docs/testing.md)).
 
 ### A dry run on production accounting
 

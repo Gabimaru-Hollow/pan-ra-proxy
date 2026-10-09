@@ -13,4 +13,4 @@ The Proxy doesn't remember which Mappings it has sent. Every Start and Interim-U
 ## Consequences
 
 - Correctness can't rest on remembering what was sent. Within a Batch it rests on keying changes by IP (GLOSSARY.md, Batch). Across Batches it rests on the Interim-Updates, which bound any wrong Mapping to one interval.
-- Out-of-order accounting (RADIUS doesn't guarantee order, and NPS retransmits) is repaired the same way, within one Interim-Update interval. A Logout sent across Batches after the IP changed hands can't remove the new holder's Mapping, because PAN-OS matches a Logout on name and IP ([deployment.md, answer 2](../deployment.md#answers-from-the-firewall-team-2026-10-05)).
+- Out-of-order accounting (RADIUS doesn't guarantee order, and NPS retransmits) is repaired the same way, within one Interim-Update interval. A Logout sent across Batches after the IP changed hands can't remove the new holder's Mapping, because PAN-OS matches a Logout on name and IP ([environment.md, answer 2](../environment.md#answers-from-the-firewall-team-2026-10-05)).

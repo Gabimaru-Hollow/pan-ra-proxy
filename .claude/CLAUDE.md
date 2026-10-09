@@ -17,10 +17,10 @@ Read these before changing anything, in this order:
 1. **`GLOSSARY.md`** — the glossary. Use these words (Mapping, Login, Logout, Batch, Canonical Username, Placeholder IP, Shared Account, RADIUS Client, Firewall) in code, tests, logs and commits.
 2. **`docs/adr/`** — decisions already taken. Don't re-litigate them; amend the ADR if one turns out wrong.
 3. **`docs/refactoring-spec.md`** — requirements (FR/NFR), the code review of the upstream and the configuration. Event IDs are listed in `src/PanRaProxy/Diagnostics/Log.cs`, metrics in `Diagnostics/ProxyMetrics.cs`.
-4. **`docs/deployment.md`** — the environment and the evidence measured from the live capture.
+4. **`docs/environment.md`** — the environment and the evidence measured from the live capture.
 5. **`docs/architecture-review.md`** — open candidates for deepening the .NET 8 code. Candidates, not decisions.
 
-Also: `docs/install.md` (MSI, secrets, logs, console runs), `docs/testing.md` (`dotnet test` plus the end-to-end replay of a live capture, both through `build/test-all.ps1`) and `docs/issues.md` (known issues that are unverified or need a decision).
+Also: `INSTALL.md` (MSI, secrets, logs, console runs), `docs/testing.md` (`dotnet test` plus the end-to-end replay of a live capture, both through `build/test-all.ps1`) and `docs/issues.md` (known issues that are unverified or need a decision).
 
 Two things to know before running anything:
 

@@ -11,7 +11,7 @@ using PanRaProxy.Startup;
 namespace PanRaProxy.Tests.Startup;
 
 /// <summary>
-/// What an administrator meets first: the switches, the exit codes (docs/install.md), and a console run
+/// What an administrator meets first: the switches, the exit codes (INSTALL.md), and a console run
 /// that uses what the installation created but creates nothing on the machine.
 /// </summary>
 public sealed class ProxyStartupTests : IDisposable

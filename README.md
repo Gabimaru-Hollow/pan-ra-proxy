@@ -8,15 +8,15 @@ It is a .NET 8 rework of [lithnet/pan-ra-proxy](https://github.com/lithnet/pan-r
 
 - Windows Server with the .NET 8 runtime bundled: the executable is self-contained.
 - PAN-OS 10 or later, with an API account limited to XML API > User-ID Agent.
-- A RADIUS accounting source that sends a real `Framed-IP-Address` (see [deployment.md](docs/deployment.md)).
+- A RADIUS accounting source that sends a real `Framed-IP-Address` (see [environment.md](docs/environment.md)).
 
 ## Documentation
 
 | | |
 |---|---|
 | [GLOSSARY.md](GLOSSARY.md) | The glossary: Mapping, Login, Logout, Batch, Canonical Username… |
-| [docs/install.md](docs/install.md) | MSI, secrets, logs, console runs, `--check-config`, `--dry-run` |
-| [docs/deployment.md](docs/deployment.md) | The target environment and what the live capture measured |
+| [INSTALL.md](INSTALL.md) | MSI, secrets, logs, console runs, `--check-config`, `--dry-run` |
+| [docs/environment.md](docs/environment.md) | The target environment and what the live capture measured |
 | [docs/testing.md](docs/testing.md) | Unit tests and the end-to-end replay, through `build\test-all.ps1` |
 | [docs/refactoring-spec.md](docs/refactoring-spec.md) | Requirements, and the review of the upstream code |
 | [docs/adr/](docs/adr/) | Decisions |

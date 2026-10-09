@@ -131,7 +131,7 @@ This is accepted by P3-4 (no persistence, Interim-Updates rebuild), and it costs
 
 The community case the team cited shows that a different name makes the Logout fail. It doesn't settle this.
 
-**When it matters.** Only with `UserId:LogoutOnStop` on. It's off by default, and stays off because of the spurious Stops ([deployment.md](deployment.md)).
+**When it matters.** Only with `UserId:LogoutOnStop` on. It's off by default, and stays off because of the spurious Stops ([environment.md](environment.md)).
 
 **To verify.** Before turning Logout-on-Stop on, on a test Firewall:
 1. Log in the same test user on two test IPs.

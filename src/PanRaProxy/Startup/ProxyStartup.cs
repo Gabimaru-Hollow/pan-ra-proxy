@@ -43,7 +43,7 @@ internal sealed record StartupEnvironment(
 }
 
 /// <summary>
-/// From the command line to an exit code (docs/install.md): 0 success, 1 invalid configuration or a
+/// From the command line to an exit code (INSTALL.md): 0 success, 1 invalid configuration or a
 /// listener failure, 2 an unknown option. The same executable runs as the Windows service and in a
 /// console. A console run uses what the installation created (the Event Log, the logs folder) and
 /// creates nothing: no registry keys, no folders.
@@ -132,7 +132,7 @@ public static class ProxyStartup
             ContentRootPath = AppContext.BaseDirectory,
         });
 
-        // Defaults ship in the install folder; the site's settings live in %ProgramData%\PanRaProxy (docs/install.md).
+        // Defaults ship in the install folder; the site's settings live in %ProgramData%\PanRaProxy (INSTALL.md).
         builder.Configuration.AddSiteSettings(environment.SiteSettingsFile);
 
         List<Action<ILogger>> notes = [];
@@ -242,6 +242,6 @@ public static class ProxyStartup
               --Firewalls:Endpoints:0=https://fw-a.example/api/
 
         Logs: console, rolling files in %ProgramData%\PanRaProxy\logs, and the PanRaProxy
-        Event Log (warnings and errors). See docs/install.md.
+        Event Log (warnings and errors). See INSTALL.md.
         """;
 }
