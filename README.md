@@ -20,7 +20,7 @@ It is a .NET 8 rework of [lithnet/pan-ra-proxy](https://github.com/lithnet/pan-r
 | [docs/testing.md](docs/testing.md) | Unit tests and the end-to-end replay, through `build\test-all.ps1` |
 | [docs/refactoring-spec.md](docs/refactoring-spec.md) | Requirements, and the review of the upstream code |
 | [docs/adr/](docs/adr/) | Decisions |
-| [docs/issues.md](docs/issues.md) | Known issues, unverified or awaiting a decision |
+| [docs/issues/](docs/issues/README.md) | Known issues, unverified or awaiting a decision |
 
 ## Build
 

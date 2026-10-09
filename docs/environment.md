@@ -98,4 +98,4 @@ The interval is declared to the Proxy as `UserId.InterimIntervalMinutes` (defaul
    - **What it doesn't change.** Logout-on-Stop stays **off by default**. The main risk was never across
      users. It's the spurious Stops measured above: 22 of 34 Stops are for the same user and IP that stay
      connected, and there the names match. Before turning it on for Shared Accounts, see
-     [issues.md #11](issues.md#11-how-wide-a-logout-without-blockstart-reaches).
+     [issue 11](issues/11-how-wide-a-logout-without-blockstart-reaches.md).

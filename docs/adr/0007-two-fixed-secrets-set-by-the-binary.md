@@ -1,6 +1,6 @@
 # Two fixed secrets, set by the binary and encrypted at rest
 
-**Status:** Accepted and implemented, 2026-09-30. Supersedes [ADR 0003](0003-secrets-as-protected-files-provided-after-install.md). What only an elevated run on a real install can confirm is in [issues.md](../issues.md), item 10.
+**Status:** Accepted and implemented, 2026-09-30. Supersedes [ADR 0003](0003-secrets-as-protected-files-provided-after-install.md). What only an elevated run on a real install can confirm is in [issue 10](../issues/10-what-set-secret-does-to-the-machine.md).
 
 The Proxy has exactly two secrets, with fixed names:
 - `radius`: the RADIUS shared secret, the same for every RADIUS Client;
