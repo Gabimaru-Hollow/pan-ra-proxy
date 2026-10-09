@@ -14,7 +14,7 @@ Revisit this if the Proxy has to run on Linux or in a container. Name Translatio
 
 ## Amendment (step 2 of the build order)
 
-The upstream attribute parser (`RadiusAttribute.cs`) was not carried over. It throws on unexpected value lengths (the cause of the silent listener death, P1-2), mutates its input buffer, and most of its 521 lines describe attributes the Proxy never reads. It was replaced by a small attribute reader that never throws on packet content. The authenticator and Proxy-State behaviour is unchanged and is verified against fixtures generated independently from RFC 2866.
+The upstream attribute parser (`RadiusAttribute.cs`) was not carried over. It throws on unexpected value lengths (the cause of the silent listener death), mutates its input buffer, and most of its 521 lines describe attributes the Proxy never reads. It was replaced by a small attribute reader that never throws on packet content. The authenticator and Proxy-State behaviour is unchanged and is verified against fixtures generated independently from RFC 2866.
 
 ## Considered Options
 

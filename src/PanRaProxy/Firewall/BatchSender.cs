@@ -7,7 +7,7 @@ namespace PanRaProxy.Firewall;
 
 /// <summary>
 /// Reads Batches and submits them, one at a time: to the Firewall, or nowhere in a dry run. A failing
-/// Batch is logged and dropped (P3-4); nothing stops the loop except shutdown.
+/// Batch is logged and dropped (no persistence, docs/specs.md); nothing stops the loop except shutdown.
 /// </summary>
 internal sealed class BatchSender(
     MappingBatcher batcher,

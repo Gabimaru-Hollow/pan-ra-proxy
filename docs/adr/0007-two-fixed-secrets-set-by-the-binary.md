@@ -41,7 +41,7 @@ What this decision adds is protection of copies taken off the machine, plus one 
   - **The value would sit in plaintext** in a file readable by local users (`%ProgramData%\PanRaProxy` inherits `Users: Read`) until the next start, and in editor backups and shadow copies afterwards.
 
   Rewriting a JSON file that allows comments without damaging it is its own problem too.
-- **Keep `Set-PanRaProxySecret.ps1`**: it works, but it's a second tool to ship, sign and keep in step with the binary, and it goes against the binary-first approach (architecture review, candidate 12).
+- **Keep `Set-PanRaProxySecret.ps1`**: it works, but it's a second tool to ship, sign and keep in step with the binary, and it goes against the binary-first approach ([specs.md](../specs.md#install-from-the-binary)).
 - **`--set-secret` and `--set-api-key` as two commands**: the same code path twice. One verb with a fixed set of names is one help line, and a third secret costs a name, not a command.
 - **User-scoped DPAPI, Credential Manager, registry, service environment variables**: covered by ADR 0003 and still rejected for its reasons.
 
@@ -51,4 +51,4 @@ What this decision adds is protection of copies taken off the machine, plus one 
 - **A blob that won't decrypt stops the Proxy with event 3106**, which says to run `--set-secret` again. That happens after the machine is reinstalled, or when the file is copied from another host.
 - **The configuration changes** for existing site settings. `Radius:Clients:N:SecretName` and `Firewalls:ApiKeySecretName` go away. `Radius:Clients:N` keeps `Host` only, or becomes a list of host strings. Validation reports the old keys as obsolete instead of silently ignoring them.
 - **Code to change:** `RadiusClientRegistry` keeps a set of addresses and one secret, and "one address with two different secrets" disappears. `Set-PanRaProxySecret.ps1` is removed, and `INSTALL.md`, `testing.md` and `tools/e2e/live-replay.py` change with it.
-- **A console run still creates nothing.** Only `--set-secret`, run by the administrator on purpose, writes to the machine. It's the first command that does, and the natural companion of `--install` if candidate 12 ever happens.
+- **A console run still creates nothing.** Only `--set-secret`, run by the administrator on purpose, writes to the machine. It's the first command that does, and the natural companion of `--install` if [`--install`](../specs.md#install-from-the-binary) ever happens.

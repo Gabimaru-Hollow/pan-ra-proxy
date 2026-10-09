@@ -6,7 +6,7 @@ The Proxy doesn't remember which Mappings it has sent. Every Start and Interim-U
 
 - **A table of sent Mappings (IP → username, last sent), used to skip Logins the Firewall already holds.** Ruled out:
   - **The refresh is the mechanism.** A Mapping lasts its Timeout (15 min) because each Interim-Update (every 5 min) sends the Login again. Skipping known ones would mean tracking every Timeout and resending before it runs out: a copy of the Firewall's table, maintained in the Proxy.
-  - **A second record of the same knowledge.** It diverges without a sound when the Firewall reboots, commits or fails over, or when a Batch is lost (P3-4). Today a lost Batch costs nothing, because the next Interim-Update rebuilds it. With the table, that Mapping would stay known to the Proxy and missing on the Firewall.
+  - **A second record of the same knowledge.** It diverges without a sound when the Firewall reboots, commits or fails over, or when a Batch is lost ([specs.md](../specs.md#design-notes), *No persistence*). Today a lost Batch costs nothing, because the next Interim-Update rebuilds it. With the table, that Mapping would stay known to the Proxy and missing on the Firewall.
   - **Little to save.** The replay of the live capture sends 87 entries for 40 distinct Mappings in 9 minutes: about 5 redundant entries a minute, grouped into single HTTP calls.
 - **A cache from raw username to Canonical Username for every rule.** The rules are regular expressions that cost microseconds. Only the directory lookup is worth caching, and it already is.
 

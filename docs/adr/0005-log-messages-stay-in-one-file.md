@@ -1,6 +1,6 @@
 # Log messages stay in one file, without an event-ID registry
 
-`Diagnostics/Log.cs` keeps every `[LoggerMessage]` of the Proxy, and `Diagnostics/ProxyMetrics.cs` every instrument, even though this makes Diagnostics depend on the types of every module and every module depend on Diagnostics (architecture review, candidate 4). No separate table of event IDs is maintained next to the code, and no test compares the two: `Log.cs` is the list.
+`Diagnostics/Log.cs` keeps every `[LoggerMessage]` of the Proxy, and `Diagnostics/ProxyMetrics.cs` every instrument, even though this makes Diagnostics depend on the types of every module and every module depend on Diagnostics ([specs.md](../specs.md#rejected-and-closed), *Break the Diagnostics hub*). No separate table of event IDs is maintained next to the code, and no test compares the two: `Log.cs` is the list.
 
 ## Considered Options
 

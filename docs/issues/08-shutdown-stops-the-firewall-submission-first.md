@@ -7,7 +7,7 @@
 2. the listener stops next, but until then it keeps acknowledging requests whose Mappings will never be sent;
 3. the worker stops last.
 
-This is accepted by P3-4 (no persistence, Interim-Updates rebuild), and it costs a few seconds of accounting per stop.
+This is accepted under [*No persistence*](../specs.md#design-notes) (Interim-Updates rebuild), and it costs a few seconds of accounting per stop.
 
 **Possible change.** Register the Firewall module first and RADIUS last, so the listener stops before anything else.
 

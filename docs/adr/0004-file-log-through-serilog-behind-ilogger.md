@@ -4,7 +4,7 @@ The Proxy's code logs only through `Microsoft.Extensions.Logging`: `ILogger<T>` 
 
 ## Considered Options
 
-- **Our own file writer**, as before: 265 lines covering a background thread, rolling and pruning. It held the defect that let a failed roll end the process (architecture review, finding 7). Rolling files are a solved problem, and the code wasn't about the Proxy's domain.
+- **Our own file writer**, as before: 265 lines covering a background thread, rolling and pruning. It held the defect that let a failed roll end the process ([specs.md](../specs.md#design-notes), *Files are written by Serilog*). Rolling files are a solved problem, and the code wasn't about the Proxy's domain.
 - **Serilog as the logging API** (`Log.Logger` or Serilog's `ILogger` in the code): it would tie every module to one library, and lose the DI-injected `ILogger` the tests use to capture event IDs.
 - **Serilog for every destination** (`UseSerilog` with the Event Log sink): the Event Log sink derives the event ID from a hash of the message template unless given a custom provider, while the Microsoft Event Log provider writes the `ILogger` `EventId` as it is (NFR-07). One more thing to get right, for no gain.
 - **Another library for the files** (NLog, a `Microsoft.Extensions.Logging` file provider): possible. Serilog's file sink is the most used, and since only one file knows it, swapping it later costs one file.

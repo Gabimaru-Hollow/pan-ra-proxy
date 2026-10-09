@@ -16,7 +16,7 @@ public abstract record SubmissionResult
 
     /// <summary>
     /// A Firewall answered but refused the whole Batch (e.g. invalid credential, malformed request).
-    /// No failover: the next Firewall would refuse it the same way. The Batch is dropped (P3-4).
+    /// No failover: the next Firewall would refuse it the same way. The Batch is dropped (no persistence, docs/specs.md).
     /// </summary>
     public sealed record ApiError(Uri Firewall, string Message) : SubmissionResult;
 

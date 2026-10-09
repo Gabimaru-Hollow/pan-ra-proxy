@@ -2,7 +2,7 @@
 
 **Severity:** Low · **Status:** Verified by reading
 
-**What.** `TranslateNameW` is a synchronous native call with no timeout. The worker keeps it off the listener (finding 9 of the architecture review), but while it hangs:
+**What.** `TranslateNameW` is a synchronous native call with no timeout. The worker keeps it off the listener (see [specs.md](../specs.md#design-notes), *The Mapping decision runs off the listener's path*), but while it hangs:
 - no Mapping is decided, and Logins wait in the request queue;
 - after `UserId:QueueCapacity` requests the oldest are dropped (NFR-03, counted in `panraproxy.requests.queue.dropped`);
 - stopping the service waits up to `HostOptions.ShutdownTimeout` (30 s) before giving up on the worker.

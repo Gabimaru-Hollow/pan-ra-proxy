@@ -83,7 +83,7 @@ The interval is declared to the Proxy as `UserId.InterimIntervalMinutes` (defaul
    - **What it means for the Proxy.** Any peer that answers is a valid target. That covers the case where the
      Proxy keeps writing to a peer that has since become passive, after a failover back with preemption. The
      current rule (fail over only when a peer can't be reached, start next time from the last peer that
-     answered) is enough. This closes architecture review candidate 6.
+     answered) is enough. This closes the failover question in [specs.md](specs.md#rejected-and-closed).
    - **What stays a risk.** If HA1 is late or down, a Mapping written on one peer may not reach the other.
      That's inherent to HA and holds for the VIP too: the Proxy can't see it.
    - **Retries are harmless.** A peer can apply a Batch and fail to answer. The Proxy then sends the same
