@@ -1,6 +1,6 @@
 # Refactoring spec: fork of lithnet/pan-ra-proxy
 
-Starting spec for reusing and refactoring `lithnet/pan-ra-proxy`. Terms are defined in [CONTEXT.md](../CONTEXT.md). The deployment context is in [deployment.md](deployment.md), and the decisions are in [adr/](adr/).
+Starting spec for reusing and refactoring `lithnet/pan-ra-proxy`. Terms are defined in [GLOSSARY.md](../GLOSSARY.md). The deployment context is in [deployment.md](deployment.md), and the decisions are in [adr/](adr/).
 
 ## 1. Deliverables
 

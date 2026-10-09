@@ -1,6 +1,6 @@
 # Deployment: User-ID on the WiFi VLAN via NPS accounting
 
-How the Proxy fits the target environment: 802.1X clients on an Extreme WiNG wireless network, authenticated by NPS, with a Palo Alto Firewall segmenting the WiFi VLAN. Terms are defined in [CONTEXT.md](../CONTEXT.md).
+How the Proxy fits the target environment: 802.1X clients on an Extreme WiNG wireless network, authenticated by NPS, with a Palo Alto Firewall segmenting the WiFi VLAN. Terms are defined in [GLOSSARY.md](../GLOSSARY.md).
 
 ## Goal
 
@@ -55,7 +55,7 @@ A 9-minute capture of the accounting NPS forwards (125 Accounting-Requests, 37 u
 
 The Proxy sees **only accounting** (Packet-Type 4). It never receives the Access-Requests for roaming and re-authentication, even though those carry IP and identity in the NPS logs.
 
-Before any development, confirm that the accounting reaching NPS carries a real `Framed-IP-Address`, at least in Interim-Updates. The check and the WiNG configuration it needs are described in `CONTEXT-nps-vector-userid.md` §7.3 and §8. That document is external and not part of this repository.
+Before any development, confirm that the accounting reaching NPS carries a real `Framed-IP-Address`, at least in Interim-Updates. The live capture measured above is that check; if the Controller does not send it, the Controller must be configured to include the client IP in its accounting.
 
 ## NPS configuration
 

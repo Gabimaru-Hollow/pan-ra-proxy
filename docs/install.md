@@ -1,6 +1,6 @@
 # Installing the Proxy
 
-The MSI (`PanRaProxy.msi`, per-machine, x64) installs the program and registers it with Windows. It never carries secrets or site settings. Those are provided after installation, so the same MSI works for every site. Terms are defined in [CONTEXT.md](../CONTEXT.md).
+The MSI (`PanRaProxy.msi`, per-machine, x64) installs the program and registers it with Windows. It never carries secrets or site settings. Those are provided after installation, so the same MSI works for every site. Terms are defined in [GLOSSARY.md](../GLOSSARY.md).
 
 ## What the MSI does
 
