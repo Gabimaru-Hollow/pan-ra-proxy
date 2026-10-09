@@ -75,7 +75,7 @@ _Avoid_: computer login, device account
 ### Deployment
 
 **Controller**:
-The wireless controller (Extreme WiNG VX9000) that relays all AP RADIUS traffic through itself, so upstream servers see it as the only NAS.
+The wireless controller (ex. Extreme WiNG VX9000, Aruba AP) that relays all AP RADIUS traffic through itself, so upstream servers see it as the only NAS.
 _Avoid_: WLC, AP (when meaning the controller)
 
 **Forwarding Server**:
